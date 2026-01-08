@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react' // Import Suspense
+import { useEffect, useState, Suspense } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -10,132 +10,180 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// 1. Separate Logic Component
 function DashboardContent() {
   const searchParams = useSearchParams()
   const userId = searchParams.get('userId')
   
   const [profile, setProfile] = useState<any>(null)
+  const [children, setChildren] = useState<any[]>([])
+  
+  // State for Switcher: null = Parent (Me), string = Child UUID
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null) 
+
   const [packages, setPackages] = useState<any[]>([])
   const [bookings, setBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  // 1. Initial Load: Get User + Children list
   useEffect(() => {
     if (!userId) return
+    const fetchUser = async () => {
+      // Get Parent Profile
+      const { data: user } = await supabase.from('profiles').select('*').eq('id', userId).single()
+      setProfile(user)
 
-    const fetchData = async () => {
-      // 1. Get Profile
-      const { data: profileData } = await supabase
-        .from('profiles').select('*').eq('id', userId).single()
-      setProfile(profileData)
-
-      // 2. Get Packages
-      const { data: packageData } = await supabase
-        .from('user_packages')
-        .select(`*, package_templates (name)`)
-        .eq('user_id', userId)
-        .eq('status', 'active')
-      setPackages(packageData || [])
-
-      // 3. Get Bookings
-      const { data: bookingData } = await supabase
-        .from('bookings')
-        .select(`*, classes (*), child_profiles(nickname)`)
-        .eq('user_id', userId)
-        .order('class_date', { ascending: true })
-      setBookings(bookingData || [])
-
-      setLoading(false)
+      // Get Children
+      const { data: kids } = await supabase.from('child_profiles').select('*').eq('parent_id', userId)
+      setChildren(kids || [])
     }
-    fetchData()
+    fetchUser()
   }, [userId])
 
-  if (loading) return <div className="p-8">Loading Dashboard...</div>
-  if (!profile) return <div className="p-8">User not found</div>
+  // 2. Data Fetcher: Runs whenever the "Active Profile Tab" changes
+  useEffect(() => {
+    if (!userId) return
+    setLoading(true)
+
+    const fetchData = async () => {
+      let pkgQuery = supabase.from('user_packages').select(`*, package_templates (name)`).eq('status', 'active')
+      let bookingQuery = supabase.from('bookings').select(`*, classes (*), child_profiles(nickname)`).order('class_date', { ascending: true })
+
+      if (activeProfileId) {
+        // CASE: Viewing a Child
+        pkgQuery = pkgQuery.eq('child_id', activeProfileId)
+        bookingQuery = bookingQuery.eq('child_id', activeProfileId)
+      } else {
+        // CASE: Viewing Parent (Me)
+        // Important: Parent's own pack has child_id = NULL
+        pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null)
+        bookingQuery = bookingQuery.eq('user_id', userId).is('child_id', null)
+      }
+
+      const [{ data: packs }, { data: books }] = await Promise.all([pkgQuery, bookingQuery])
+      
+      setPackages(packs || [])
+      setBookings(books || [])
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [userId, activeProfileId])
+
+  if (!profile) return <div className="p-8 text-center">Loading...</div>
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      
+      {/* Header & Switcher */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Hello, {profile.full_name} 👋</h1>
-          <p className="text-gray-500">Player Dashboard</p>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome, {profile.full_name}</h1>
+          <p className="text-gray-500 text-sm">Manage bookings for you and your family</p>
         </div>
         <Link href="/" className="text-sm text-red-500 hover:underline">Log Out</Link>
       </div>
 
-      {/* Package Card */}
-      <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Active Package</h2>
-        {packages.length === 0 ? (
-          <p className="text-gray-500">No active packages found.</p>
-        ) : (
-          packages.map(pkg => (
-            <div key={pkg.id} className="flex justify-between items-center">
-              <div>
-                <span className="text-xl font-bold text-blue-900">{pkg.package_templates.name}</span>
-                <p className="text-sm text-gray-500">Expires: {new Date(pkg.expiry_date).toLocaleDateString()}</p>
-              </div>
-              <div className="text-right">
-                <span className="block text-3xl font-bold text-blue-600">{pkg.remaining_sessions}</span>
-                <span className="text-xs text-gray-400 uppercase">Sessions Left</span>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Bookings List */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Your Schedule</h2>
-          <Link 
-            href={`/book?userId=${userId}`}
-            className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700 transition"
+      {/* 🔹 PROFILE SWITCHER TABS */}
+      <div className="flex space-x-2 bg-white p-2 rounded-lg shadow-sm border overflow-x-auto">
+        <button
+          onClick={() => setActiveProfileId(null)}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap
+            ${activeProfileId === null ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          👤 My Profile
+        </button>
+        {children.map(child => (
+          <button
+            key={child.id}
+            onClick={() => setActiveProfileId(child.id)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap
+              ${activeProfileId === child.id ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
           >
-            + Book Session
-          </Link>
-        </div>
-
-        {bookings.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 bg-gray-50 rounded">
-            No upcoming classes booked.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {bookings.map((booking) => (
-              <div key={booking.id} className="border border-gray-200 rounded p-4 flex justify-between items-center bg-gray-50">
-                <div>
-                  <p className="font-bold text-gray-800">
-                    {new Date(booking.class_date).toLocaleDateString()} @ {new Date(booking.class_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                  </p>
-                  <p className="text-sm text-gray-600">{booking.classes.location}</p>
-                  {booking.child_profiles && (
-                    <span className="inline-block mt-1 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
-                      Player: {booking.child_profiles.nickname}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold
-                    ${booking.status === 'booked' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                    {booking.status.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+            👶 {child.nickname}
+          </button>
+        ))}
       </div>
+
+      {/* Content Area */}
+      {loading ? (
+        <div className="py-12 text-center text-gray-400">Loading data...</div>
+      ) : (
+        <>
+          {/* Active Package Card */}
+          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
+              {activeProfileId ? "Child's Active Package" : "My Active Package"}
+            </h2>
+            {packages.length === 0 ? (
+              <p className="text-gray-500 italic">No active packages found for this profile.</p>
+            ) : (
+              packages.map(pkg => (
+                <div key={pkg.id} className="flex justify-between items-center border-b pb-4 last:border-0 last:pb-0">
+                  <div>
+                    <span className="text-xl font-bold text-blue-900">{pkg.package_templates.name}</span>
+                    <p className="text-sm text-gray-500">Expires: {new Date(pkg.expiry_date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-3xl font-bold text-blue-600">{pkg.remaining_sessions}</span>
+                    <span className="text-xs text-gray-400 uppercase">Sessions Left</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Schedule List */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Upcoming Schedule</h2>
+              <Link 
+                // 🔗 Pass the childId if we are currently viewing a child!
+                href={`/book?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`}
+                className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700 transition shadow-sm"
+              >
+                + Book for {activeProfileId ? children.find(c => c.id === activeProfileId)?.nickname : 'Me'}
+              </Link>
+            </div>
+
+            {bookings.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 bg-gray-50 rounded border border-dashed">
+                No classes booked yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {bookings.map((booking) => (
+                  <div key={booking.id} className="border border-gray-200 rounded p-4 flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition">
+                    <div>
+                      <p className="font-bold text-gray-800">
+                        {new Date(booking.class_date).toLocaleDateString()}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                         ⏰ {new Date(booking.class_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                         <span className="mx-2">•</span>
+                         📍 {booking.classes.location}
+                      </p>
+                    </div>
+                    <div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold
+                        ${booking.status === 'booked' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
+                        {booking.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
-// 2. Export Main Page with Suspense
 export default function Dashboard() {
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <Suspense fallback={<div className="text-center p-10">Loading User Data...</div>}>
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
+      <Suspense fallback={<div>Loading...</div>}>
         <DashboardContent />
       </Suspense>
     </div>
