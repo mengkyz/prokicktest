@@ -1,128 +1,64 @@
 'use client'
-
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
-// Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export default function BookingTest() {
-  // State for inputs
-  const [formData, setFormData] = useState({
-    userId: '',
-    childId: '',
-    packageId: '',
-    classId: ''
-  })
-  
-  const [loading, setLoading] = useState(false)
-  const [response, setResponse] = useState<any>(null)
+export default function LoginPage() {
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
-  // Handle Input Changes
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
-
-  // The Booking Function
-  const handleBooking = async () => {
-    setLoading(true)
-    setResponse(null)
-
-    try {
-      // Calling the Database RPC function we created
-      const { data, error } = await supabase.rpc('book_class', {
-        p_user_id: formData.userId,
-        p_child_id: formData.childId || null, // specific handling for empty string
-        p_package_id: formData.packageId,
-        p_class_id: formData.classId
-      })
-
-      if (error) throw error
-      setResponse(data)
-
-    } catch (err: any) {
-      setResponse({ error: err.message || err })
-    } finally {
+  useEffect(() => {
+    const fetchUsers = async () => {
+      // Fetch profiles to simulate login list
+      const { data } = await supabase.from('profiles').select('*').order('full_name')
+      if (data) setUsers(data)
       setLoading(false)
     }
-  }
+    fetchUsers()
+  }, [])
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-lg">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800">ProKick API Tester</h1>
-        
-        <div className="space-y-4">
-          
-          {/* User ID Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">User ID (Parent/Adult)</label>
-            <input 
-              name="userId" 
-              placeholder="Paste User UUID"
-              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Child ID Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Child ID (Optional)</label>
-            <input 
-              name="childId" 
-              placeholder="Paste Child UUID (Leave empty for Adult)"
-              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Package ID Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Package ID</label>
-            <input 
-              name="packageId" 
-              placeholder="Paste Package UUID"
-              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Class ID Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Class ID</label>
-            <input 
-              name="classId" 
-              placeholder="Paste Class UUID"
-              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Action Button */}
-          <button
-            onClick={handleBooking}
-            disabled={loading}
-            className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-              ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
-          >
-            {loading ? 'Sending Request...' : 'Book Class via RPC'}
-          </button>
-
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-extrabold text-blue-900">ProKick Demo</h1>
+          <p className="mt-2 text-gray-600">Select a user to simulate login</p>
         </div>
 
-        {/* Response Display */}
-        {response && (
-          <div className={`mt-6 p-4 rounded-md ${response.success ? 'bg-green-50' : 'bg-red-50'}`}>
-            <h3 className="text-sm font-medium text-gray-900 mb-2">Server Response:</h3>
-            <pre className="text-xs bg-gray-800 text-green-400 p-3 rounded overflow-auto">
-              {JSON.stringify(response, null, 2)}
-            </pre>
+        {loading ? (
+          <p className="text-center">Loading users...</p>
+        ) : (
+          <div className="bg-white shadow overflow-hidden rounded-md">
+            <ul className="divide-y divide-gray-200">
+              {users.map((user) => (
+                <li key={user.id} className="hover:bg-blue-50 transition cursor-pointer">
+                  <Link 
+                    href={`/dashboard?userId=${user.id}`}
+                    className="block p-4 flex items-center justify-between"
+                  >
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        {user.full_name.charAt(0)}
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-900">{user.full_name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+                      </div>
+                    </div>
+                    <span className="text-gray-400">→</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
-
       </div>
     </div>
   )
