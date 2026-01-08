@@ -45,7 +45,7 @@ function DashboardContent() {
     setLoading(true)
 
     const fetchData = async () => {
-      let pkgQuery = supabase.from('user_packages').select(`*, package_templates (name)`).eq('status', 'active')
+      let pkgQuery = supabase.from('user_packages').select(`*, package_templates (name, extra_session_price)`).eq('status', 'active')
       let bookingQuery = supabase.from('bookings').select(`*, classes (*), child_profiles(nickname)`).order('class_date', { ascending: true })
 
       if (activeProfileId) {
@@ -68,6 +68,30 @@ function DashboardContent() {
 
     fetchData()
   }, [userId, activeProfileId])
+
+  // 3. Handle Buying Extra Session
+  const handleBuyExtra = async (pkg: any) => {
+    const confirmMsg = `Buy 1 Extra Session for ${pkg.package_templates.name}?\nPrice: ${pkg.package_templates.extra_session_price} THB`
+    if (!window.confirm(confirmMsg)) return;
+
+    setLoading(true);
+    
+    // Call our SQL function
+    const { data, error } = await supabase.rpc('buy_extra_session', {
+      p_user_id: userId,
+      p_package_id: pkg.id
+    });
+
+    if (error) {
+      alert("Error: " + error.message);
+    } else if (data.success) {
+      alert(`✅ Success! ${data.message}`);
+      window.location.reload(); 
+    } else {
+      alert("❌ Failed: " + data.message);
+    }
+    setLoading(false);
+  };
 
   if (!profile) return <div className="p-8 text-center">Loading...</div>
 
@@ -118,15 +142,37 @@ function DashboardContent() {
               <p className="text-gray-500 italic">No active packages found for this profile.</p>
             ) : (
               packages.map(pkg => (
-                <div key={pkg.id} className="flex justify-between items-center border-b pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <span className="text-xl font-bold text-blue-900">{pkg.package_templates.name}</span>
-                    <p className="text-sm text-gray-500">Expires: {new Date(pkg.expiry_date).toLocaleDateString()}</p>
+                <div key={pkg.id} className="border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-xl font-bold text-blue-900">{pkg.package_templates.name}</span>
+                      <p className="text-sm text-gray-500">Expires: {new Date(pkg.expiry_date).toLocaleDateString()}</p>
+                      
+                      {/* Extra Session Status Indicator */}
+                      <div className="mt-2 text-xs font-medium text-gray-500 bg-gray-100 inline-block px-2 py-1 rounded">
+                        Extras Used: {pkg.extra_sessions_purchased} / 2
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-3xl font-bold text-blue-600">{pkg.remaining_sessions}</span>
+                      <span className="text-xs text-gray-400 uppercase">Sessions Left</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="block text-3xl font-bold text-blue-600">{pkg.remaining_sessions}</span>
-                    <span className="text-xs text-gray-400 uppercase">Sessions Left</span>
-                  </div>
+
+                  {/* BUY EXTRA BUTTON */}
+                  {pkg.extra_sessions_purchased < 2 && (
+                    <div className="mt-4 pt-3 border-t border-dashed flex justify-end">
+                      <button
+                        onClick={() => handleBuyExtra(pkg)}
+                        className="flex items-center text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-2 rounded-md transition font-medium border border-indigo-200"
+                      >
+                        <span>⚡ Buy Extra Session (+1)</span>
+                        <span className="ml-2 bg-white px-2 py-0.5 rounded text-indigo-600 text-xs shadow-sm">
+                          ฿{pkg.package_templates.extra_session_price}
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             )}
