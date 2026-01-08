@@ -1,65 +1,129 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
+
+// Initialize Supabase Client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+export default function BookingTest() {
+  // State for inputs
+  const [formData, setFormData] = useState({
+    userId: '',
+    childId: '',
+    packageId: '',
+    classId: ''
+  })
+  
+  const [loading, setLoading] = useState(false)
+  const [response, setResponse] = useState<any>(null)
+
+  // Handle Input Changes
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
+
+  // The Booking Function
+  const handleBooking = async () => {
+    setLoading(true)
+    setResponse(null)
+
+    try {
+      // Calling the Database RPC function we created
+      const { data, error } = await supabase.rpc('book_class', {
+        p_user_id: formData.userId,
+        p_child_id: formData.childId || null, // specific handling for empty string
+        p_package_id: formData.packageId,
+        p_class_id: formData.classId
+      })
+
+      if (error) throw error
+      setResponse(data)
+
+    } catch (err: any) {
+      setResponse({ error: err.message || err })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-lg">
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">ProKick API Tester</h1>
+        
+        <div className="space-y-4">
+          
+          {/* User ID Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">User ID (Parent/Adult)</label>
+            <input 
+              name="userId" 
+              placeholder="Paste User UUID"
+              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
+              onChange={handleChange}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          {/* Child ID Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Child ID (Optional)</label>
+            <input 
+              name="childId" 
+              placeholder="Paste Child UUID (Leave empty for Adult)"
+              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
+              onChange={handleChange}
+            />
+          </div>
+
+          {/* Package ID Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Package ID</label>
+            <input 
+              name="packageId" 
+              placeholder="Paste Package UUID"
+              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
+              onChange={handleChange}
+            />
+          </div>
+
+          {/* Class ID Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Class ID</label>
+            <input 
+              name="classId" 
+              placeholder="Paste Class UUID"
+              className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-black"
+              onChange={handleChange}
+            />
+          </div>
+
+          {/* Action Button */}
+          <button
+            onClick={handleBooking}
+            disabled={loading}
+            className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
+              ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
-            Documentation
-          </a>
+            {loading ? 'Sending Request...' : 'Book Class via RPC'}
+          </button>
+
         </div>
-      </main>
+
+        {/* Response Display */}
+        {response && (
+          <div className={`mt-6 p-4 rounded-md ${response.success ? 'bg-green-50' : 'bg-red-50'}`}>
+            <h3 className="text-sm font-medium text-gray-900 mb-2">Server Response:</h3>
+            <pre className="text-xs bg-gray-800 text-green-400 p-3 rounded overflow-auto">
+              {JSON.stringify(response, null, 2)}
+            </pre>
+          </div>
+        )}
+
+      </div>
     </div>
-  );
+  )
 }
