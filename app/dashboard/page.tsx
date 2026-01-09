@@ -91,33 +91,19 @@ function DashboardContent() {
     setProcessing(false)
   }
 
-  // 4. NEW: Cancel Booking Action
   const handleCancelBooking = async (bookingId: string, classDate: string) => {
-    if (!window.confirm("Are you sure you want to cancel this booking?")) return;
+    if (!window.confirm("Are you sure you want to cancel?")) return;
     setProcessing(true);
-
-    const { data, error } = await supabase.rpc('cancel_booking', {
-      p_booking_id: bookingId,
-      p_user_id: userId // Parent ID validates ownership
-    });
-
-    if (error) {
-      alert("Error: " + error.message);
-    } else if (data.success) {
-      alert("✅ Booking Cancelled. Session has been refunded.");
-      loadDashboardData(); // Refresh list
-    } else {
-      alert("❌ Cancellation Failed: " + data.message);
-    }
+    const { data, error } = await supabase.rpc('cancel_booking', { p_booking_id: bookingId, p_user_id: userId });
+    
+    if (data?.success) { alert("✅ " + data.message); loadDashboardData(); }
+    else alert("❌ " + (error?.message || data?.message));
+    
     setProcessing(false);
   }
 
-  // Helper: Check if cancellable (Current Time < Start Time - 2 Hours)
   const isCancellable = (classDateStr: string) => {
-    const classTime = new Date(classDateStr).getTime();
-    const now = new Date().getTime();
-    const twoHoursMs = 2 * 60 * 60 * 1000;
-    return now < (classTime - twoHoursMs);
+    return new Date().getTime() < (new Date(classDateStr).getTime() - 2 * 60 * 60 * 1000);
   }
 
   const availableTemplates = templates.filter(t => activeProfileId ? t.type === 'junior' : t.type === 'adult')
@@ -213,22 +199,46 @@ function DashboardContent() {
                   <div className="divide-y divide-gray-100">
                     {bookings.map((booking) => {
                       const canCancel = isCancellable(booking.class_date);
+                      const isStandby = booking.status === 'standby';
+                      
                       return (
                         <div key={booking.id} className="p-4 hover:bg-gray-50 transition">
+                          
+                          {/* CLASS DATE & STATUS BADGE */}
                           <div className="flex justify-between items-start mb-1">
                             <span className="font-bold text-gray-800">{new Date(booking.class_date).toLocaleDateString()}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${booking.status === 'booked' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{booking.status}</span>
+                            
+                            {/* Improved Status Badge */}
+                            {isStandby ? (
+                                <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-yellow-100 text-yellow-800">
+                                  ⏳ Queue #{booking.standby_order}
+                                </span>
+                            ) : (
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${booking.status === 'booked' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                  {booking.status}
+                                </span>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-500 mb-2">
+
+                          {/* DETAILS */}
+                          <div className="text-sm text-gray-500 mb-3">
                              🕒 {new Date(booking.class_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • 📍 {booking.classes.location}
                           </div>
+
+                          {/* QUEUE INFO (If Standby) */}
+                          {isStandby && (
+                             <div className="mb-3 text-xs bg-yellow-50 text-yellow-700 p-2 rounded border border-yellow-100">
+                               You are <strong>#{booking.standby_order}</strong> in line. 
+                               {booking.standby_order === 1 ? ' You are next!' : ` ${booking.standby_order - 1} person ahead.`}
+                             </div>
+                          )}
                           
                           {/* CANCEL BUTTON */}
                           {booking.status !== 'cancelled' && (
                             <button
                               onClick={() => handleCancelBooking(booking.id, booking.class_date)}
                               disabled={!canCancel || processing}
-                              className={`w-full text-center text-xs font-bold py-1.5 rounded border transition
+                              className={`w-full text-center text-xs font-bold py-2 rounded border transition
                                 ${canCancel 
                                   ? 'border-red-200 text-red-600 hover:bg-red-50' 
                                   : 'border-gray-100 text-gray-300 cursor-not-allowed bg-gray-50'}`}
