@@ -24,11 +24,16 @@ type ModalState = {
   title: string;
   message?: string;
   details?: {
+    // For Purchases
     packageName?: string;
     price?: number;
     sessions?: number;
     validity?: number;
     targetName?: string;
+    // For Bookings
+    date?: string;
+    time?: string;
+    location?: string;
   };
   action?: () => void;
 };
@@ -133,7 +138,7 @@ function DashboardContent() {
 
   // --- HELPERS: DATE FORMATTERS ---
 
-  // Package Expiry: "12 January 2026" (Clean, No Day Name)
+  // Package Expiry: "12 January 2026"
   const formatExpiryDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-GB', {
       day: 'numeric',
@@ -142,17 +147,17 @@ function DashboardContent() {
     });
   };
 
-  // Booking Ticket: "Tue, 13 Jan 2026" (Compact Single Line)
+  // Booking Ticket: "Tue, 13 Jan 2026"
   const formatBookingDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-GB', {
-      weekday: 'short', // 'Tue'
-      day: 'numeric', // '13'
-      month: 'short', // 'Jan'
-      year: 'numeric', // '2026'
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     });
   };
 
-  // Get Target Name for "Buying for..."
+  // Get Target Name
   const getTargetName = () => {
     if (activeProfileId) {
       return (
@@ -169,9 +174,9 @@ function DashboardContent() {
     setModal({
       isOpen: true,
       type: 'confirm_extra',
-      title: 'Buy Extra Session',
+      title: 'Confirm Purchase',
       details: {
-        packageName: `${pkg.package_templates.name} (Top-up)`,
+        packageName: `${pkg.package_templates.name} (Extra Session)`,
         price: pkg.package_templates.extra_session_price,
         targetName: getTargetName(),
         sessions: 1,
@@ -195,8 +200,8 @@ function DashboardContent() {
       setModal({
         isOpen: true,
         type: 'success',
-        title: 'Extra Session Added!',
-        message: 'You can now book one more class with this package.',
+        title: 'Payment Successful!',
+        message: 'One extra session has been added to your package.',
       });
       loadDashboardData();
     } else {
@@ -243,7 +248,7 @@ function DashboardContent() {
       setModal({
         isOpen: true,
         type: 'success',
-        title: 'Purchase Successful!',
+        title: 'Payment Successful!',
         message: 'Your new package is active and ready to use.',
       });
       loadDashboardData();
@@ -258,21 +263,51 @@ function DashboardContent() {
   };
 
   // --- CANCEL BOOKING FLOW ---
-  const handleCancelBooking = async (bookingId: string) => {
-    if (!window.confirm('Are you sure you want to cancel?')) return;
+  const initiateCancelBooking = (booking: any) => {
+    setModal({
+      isOpen: true,
+      type: 'confirm_cancel',
+      title: 'Cancel Booking',
+      message: 'Are you sure you want to cancel this session?',
+      details: {
+        date: formatBookingDate(booking.class_date),
+        time: new Date(booking.class_date).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        location: booking.classes.location,
+      },
+      action: () => processCancelBooking(booking.id),
+    });
+  };
+
+  const processCancelBooking = async (bookingId: string) => {
+    setModal((prev) => ({ ...prev, isOpen: false }));
     setProcessing(true);
+
     const { data, error } = await supabase.rpc('cancel_booking', {
       p_booking_id: bookingId,
       p_user_id: userId,
     });
 
+    setProcessing(false);
+
     if (data?.success) {
-      alert('✅ Booking cancelled.');
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Booking Cancelled',
+        message: 'Your session has been cancelled successfully.',
+      });
       loadDashboardData();
     } else {
-      alert('❌ ' + (error?.message || data?.message));
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Cancellation Failed',
+        message: error?.message || data?.message,
+      });
     }
-    setProcessing(false);
   };
 
   const isCancellable = (classDateStr: string) => {
@@ -468,7 +503,6 @@ function DashboardContent() {
                           key={booking.id}
                           className="p-4 hover:bg-gray-50 transition"
                         >
-                          {/* Booking Date: Compact Single Line Format */}
                           <div className="flex justify-between items-start mb-2">
                             <span className="font-bold text-gray-800 text-base whitespace-nowrap">
                               {formatBookingDate(booking.class_date)}
@@ -531,7 +565,7 @@ function DashboardContent() {
                           )}
 
                           <button
-                            onClick={() => handleCancelBooking(booking.id)}
+                            onClick={() => initiateCancelBooking(booking)}
                             disabled={!canCancel || processing}
                             className={`w-full text-center text-xs font-bold py-2.5 rounded-lg border transition
                               ${
@@ -658,55 +692,90 @@ function DashboardContent() {
               <div className="p-6">
                 {modal.details ? (
                   <div className="space-y-4">
-                    {/* Package Summary Card */}
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-400 uppercase">
-                          Item
-                        </span>
-                        <span className="text-sm font-bold text-gray-900">
-                          {modal.details.packageName}
-                        </span>
-                      </div>
-
-                      {/* Show 'Sessions' if applicable (Not for Extra Session which is fixed 1) */}
-                      {modal.type !== 'confirm_extra' && (
+                      {/* --- PURCHASE LAYOUT --- */}
+                      {modal.type?.includes('_buy') ||
+                      modal.type?.includes('_extra') ? (
                         <>
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-400 uppercase">
-                              Sessions
+                              Item
                             </span>
                             <span className="text-sm font-bold text-gray-900">
-                              {modal.details.sessions}
+                              {modal.details.packageName}
+                            </span>
+                          </div>
+
+                          {/* Show 'Sessions' if applicable (Not for Extra Session which is fixed 1) */}
+                          {modal.type !== 'confirm_extra' && (
+                            <>
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-400 uppercase">
+                                  Sessions
+                                </span>
+                                <span className="text-sm font-bold text-gray-900">
+                                  {modal.details.sessions}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-400 uppercase">
+                                  Validity
+                                </span>
+                                <span className="text-sm font-bold text-gray-900">
+                                  {modal.details.validity} Days
+                                </span>
+                              </div>
+                            </>
+                          )}
+
+                          <div className="flex justify-between items-center border-t border-gray-200 pt-2 mt-2">
+                            <span className="text-xs font-bold text-gray-400 uppercase">
+                              Total Price
+                            </span>
+                            <span className="text-lg font-black text-blue-600">
+                              ฿{modal.details.price?.toLocaleString()}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        /* --- BOOKING/CANCEL LAYOUT --- */
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-400 uppercase">
+                              Date
+                            </span>
+                            <span className="text-sm font-bold text-gray-900">
+                              {modal.details.date}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-400 uppercase">
-                              Validity
+                              Time
                             </span>
                             <span className="text-sm font-bold text-gray-900">
-                              {modal.details.validity} Days
+                              {modal.details.time}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-400 uppercase">
+                              Location
+                            </span>
+                            <span className="text-sm font-bold text-gray-900">
+                              {modal.details.location}
                             </span>
                           </div>
                         </>
                       )}
+                    </div>
 
-                      <div className="flex justify-between items-center border-t border-gray-200 pt-2 mt-2">
-                        <span className="text-xs font-bold text-gray-400 uppercase">
-                          Total Price
-                        </span>
-                        <span className="text-lg font-black text-blue-600">
-                          ฿{modal.details.price?.toLocaleString()}
-                        </span>
+                    {modal.details.targetName && (
+                      <div className="text-center text-sm text-gray-500">
+                        Buying for:{' '}
+                        <strong className="text-gray-800">
+                          {modal.details.targetName}
+                        </strong>
                       </div>
-                    </div>
-
-                    <div className="text-center text-sm text-gray-500">
-                      Buying for:{' '}
-                      <strong className="text-gray-800">
-                        {modal.details.targetName}
-                      </strong>
-                    </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-gray-600 text-center leading-relaxed">
@@ -727,9 +796,16 @@ function DashboardContent() {
                     </button>
                     <button
                       onClick={modal.action}
-                      className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition"
+                      className={`flex-1 py-3 rounded-xl font-bold text-white shadow-md transition
+                        ${
+                          modal.type === 'confirm_cancel'
+                            ? 'bg-red-600 hover:bg-red-700'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
                     >
-                      Confirm Pay
+                      {modal.type === 'confirm_cancel'
+                        ? 'Confirm Cancel'
+                        : 'Confirm Pay'}
                     </button>
                   </>
                 ) : (

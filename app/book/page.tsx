@@ -47,7 +47,7 @@ function BookSessionContent() {
 
   // User Info State
   const [childName, setChildName] = useState<string>('');
-  const [parentName, setParentName] = useState<string>(''); // New State for Parent Name
+  const [parentName, setParentName] = useState<string>('');
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -120,7 +120,6 @@ function BookSessionContent() {
         .gt('remaining_sessions', 0);
 
       if (childId) {
-        // Fetch Child Name
         const { data: child } = await supabase
           .from('child_profiles')
           .select('nickname')
@@ -129,7 +128,6 @@ function BookSessionContent() {
         if (child) setChildName(child.nickname);
         pkgQuery = pkgQuery.eq('child_id', childId);
       } else {
-        // Fetch Parent Name (NEW)
         const { data: parent } = await supabase
           .from('profiles')
           .select('full_name, nickname')
@@ -150,8 +148,19 @@ function BookSessionContent() {
     init();
   }, [userId, childId]);
 
-  // Helper: Formatters
+  // --- Helpers: Date Formatters (MATCHING DASHBOARD) ---
+
+  // Format: "Tue, 13 Jan 2026"
   const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-GB', {
+      weekday: 'short', // 'Tue'
+      day: 'numeric', // '13'
+      month: 'short', // 'Jan'
+      year: 'numeric', // '2026'
+    });
+  };
+
+  const formatPackageDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
@@ -258,7 +267,6 @@ function BookSessionContent() {
               </span>
             </p>
           </div>
-          {/* Back Button (Left Arrow) */}
           <button
             onClick={() => router.back()}
             className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition"
@@ -332,7 +340,7 @@ function BookSessionContent() {
                         {pkg.package_templates.name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        Exp: {formatDate(pkg.expiry_date)}
+                        Exp: {formatPackageDate(pkg.expiry_date)}
                       </p>
                     </div>
                   </div>
@@ -388,6 +396,7 @@ function BookSessionContent() {
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="pl-2">
                       <div className="flex items-center gap-3 mb-1">
+                        {/* UPDATED: Full Date with Short Weekday (Matches Dashboard) */}
                         <span className="font-bold text-lg text-gray-800">
                           {formatDate(cls.start_time)}
                         </span>
@@ -455,7 +464,7 @@ function BookSessionContent() {
           )}
         </div>
 
-        {/* --- MODAL SYSTEM --- */}
+        {/* --- PROFESSIONAL MODAL SYSTEM (Unified with Dashboard) --- */}
         {modal.isOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform scale-100 transition-all">
@@ -512,6 +521,7 @@ function BookSessionContent() {
               <div className="p-6">
                 {modal.details ? (
                   <div className="space-y-4">
+                    {/* Ticket Details Card */}
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-bold text-gray-400 uppercase">
@@ -550,6 +560,7 @@ function BookSessionContent() {
                       </div>
                     )}
 
+                    {/* Status Info Box */}
                     {modal.details.queuePosition ? (
                       <div className="bg-orange-50 text-orange-800 text-sm p-3 rounded-lg text-center font-medium border border-orange-100">
                         You will be{' '}
