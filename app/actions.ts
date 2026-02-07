@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Standard Client
+// Standard Client (Anon Key) is sufficient since RLS is disabled
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -13,7 +13,7 @@ const SLIPOK_BRANCH_ID = process.env.SLIPOK_BRANCH_ID!;
 const SLIPOK_API_KEY = process.env.SLIPOK_API_KEY!;
 
 // -----------------------------------------------------------------------------
-// PAYMENT VERIFICATION LOGIC (Existing)
+// PAYMENT VERIFICATION LOGIC
 // -----------------------------------------------------------------------------
 export async function verifyAndProcessPayment(formData: FormData) {
   const file = formData.get('slip') as File;
@@ -22,13 +22,9 @@ export async function verifyAndProcessPayment(formData: FormData) {
   const packageId = formData.get('packageId') as string;
   const type = formData.get('type') as 'new_package' | 'extra_session';
 
-  console.log('--- STARTING PAYMENT VERIFICATION ---');
-
   if (!file || !userId || !packageId) {
     return { success: false, message: 'Missing required data.' };
   }
-
-  // Security Check: Ensure file is not empty
   if (file.size === 0) {
     return { success: false, message: 'File is empty.' };
   }
@@ -56,18 +52,13 @@ export async function verifyAndProcessPayment(formData: FormData) {
       expectedPrice = pkg.package_templates.extra_session_price;
     }
 
-    // 2. Call SlipOK API (With Fix for Production)
-    // -----------------------------------------------------------------
-    // FIX: Convert File Stream to Buffer to ensure data isn't lost in transit
+    // 2. Call SlipOK API
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
     const slipFormData = new FormData();
-    // IMPORTANT: The 3rd argument (file.name) is REQUIRED by SlipOK
     slipFormData.append('files', new Blob([buffer]), file.name);
     slipFormData.append('log', 'true');
     slipFormData.append('amount', expectedPrice.toString());
-    // -----------------------------------------------------------------
 
     const response = await fetch(
       `https://api.slipok.com/api/line/apikey/${SLIPOK_BRANCH_ID}`,
@@ -79,14 +70,9 @@ export async function verifyAndProcessPayment(formData: FormData) {
     );
 
     const result = await response.json();
-    console.log(
-      'SlipOK Result:',
-      result.success ? 'Success' : 'Failed',
-      result.code,
-    );
 
-    // --- LOGGING VIA RPC ---
-    const { error: logError } = await supabase.rpc('log_payment_attempt', {
+    // 3. Log via RPC
+    await supabase.rpc('log_payment_attempt', {
       p_user_id: userId,
       p_payment_type: type,
       p_target_id: packageId,
@@ -96,28 +82,18 @@ export async function verifyAndProcessPayment(formData: FormData) {
       p_error_code: result.code || null,
     });
 
-    if (logError) {
-      console.error('CRITICAL: Failed to save payment log:', logError.message);
-    } else {
-      console.log('Payment log saved successfully via RPC.');
-    }
-    // -----------------------
-
-    // 4. Handle SlipOK Errors
     if (!result.success) {
       if (result.code === 1012)
-        return { success: false, message: 'This slip has already been used!' };
+        return { success: false, message: 'Slip already used!' };
       if (result.code === 1014)
         return { success: false, message: 'Transfer to wrong account!' };
-      if (result.code === 1006)
-        return { success: false, message: 'Transfer amount does not match.' };
       return {
         success: false,
         message: result.message || 'Slip verification failed.',
       };
     }
 
-    // 5. Success! Execute Supabase Transaction
+    // 4. Execute Transaction via RPC
     let rpcResponse;
     if (type === 'new_package') {
       rpcResponse = await supabase.rpc('buy_new_package', {
@@ -133,14 +109,10 @@ export async function verifyAndProcessPayment(formData: FormData) {
     }
 
     if (rpcResponse.error) {
-      console.error('RPC Error:', rpcResponse.error);
       return { success: false, message: rpcResponse.error.message };
     }
 
-    return {
-      success: true,
-      message: 'Payment verified and processed successfully!',
-    };
+    return { success: true, message: 'Payment successful!' };
   } catch (error: any) {
     console.error('Payment Error:', error);
     return { success: false, message: 'Server error processing payment.' };
@@ -148,9 +120,8 @@ export async function verifyAndProcessPayment(formData: FormData) {
 }
 
 // -----------------------------------------------------------------------------
-// NEW: AUTO-REGISTRATION LOGIC (VIA RPC)
+// AUTO-REGISTRATION LOGIC
 // -----------------------------------------------------------------------------
-
 export async function loginOrRegisterLineUser(lineProfile: {
   userId: string;
   displayName: string;
@@ -159,8 +130,8 @@ export async function loginOrRegisterLineUser(lineProfile: {
   console.log('--- LINE LOGIN VIA RPC ---', lineProfile.userId);
 
   try {
-    // Call the database function 'register_line_user'
-    // This function checks if user exists; if not, creates them.
+    // SECURITY NOTE: Since RLS is disabled, we can just call this function.
+    // It will run with the 'anon' user's permissions, which is fine for now.
     const { data, error } = await supabase.rpc('register_line_user', {
       p_line_user_id: lineProfile.userId,
       p_display_name: lineProfile.displayName,
@@ -169,10 +140,10 @@ export async function loginOrRegisterLineUser(lineProfile: {
 
     if (error) {
       console.error('RPC Error:', error);
-      return { success: false, message: 'Database error during login.' };
+      return { success: false, message: `Database error: ${error.message}` };
     }
 
-    // RPC returns a table/array, grab the first row
+    // RPC returns a table array
     const result = data && data[0] ? data[0] : null;
 
     if (!result) {
@@ -182,11 +153,7 @@ export async function loginOrRegisterLineUser(lineProfile: {
       };
     }
 
-    return {
-      success: true,
-      userId: result.user_id,
-      isNew: result.is_new,
-    };
+    return { success: true, userId: result.user_id, isNew: result.is_new };
   } catch (err: any) {
     console.error('Server Action Error:', err);
     return { success: false, message: 'System connectivity error.' };
