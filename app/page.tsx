@@ -1,57 +1,47 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import liff from '@line/liff';
 import { loginOrRegisterLineUser } from './actions';
+
+// -----------------------------------------------------------------------------
+// GLOBAL CACHE: Prevents double-init across React Remounts (Strict Mode)
+// -----------------------------------------------------------------------------
+let liffInitPromise: Promise<void> | null = null;
 
 export default function LoginPage() {
   const [status, setStatus] = useState<'loading' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
   const router = useRouter();
 
-  // Guard to prevent running init twice in React Strict Mode
-  const isRunning = useRef(false);
-
   useEffect(() => {
-    const initAndLogin = async () => {
-      // 1. Prevent double-execution
-      if (isRunning.current) return;
-      isRunning.current = true;
-
+    const runAuth = async () => {
       try {
         const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
         if (!liffId) {
           throw new Error(
-            'LIFF ID is missing. Restart server after adding .env',
+            'LIFF ID is missing. Check .env.local and restart server.',
           );
         }
 
-        // 2. Initialize LIFF (With Robust Error Handling)
-        try {
-          await liff.init({ liffId });
-        } catch (err: any) {
-          // In React Strict Mode, this error happens frequently. We can ignore it safely.
-          if (err.code === 'ALREADY_INITIALIZED') {
-            console.log('LIFF was already initialized. Continuing...');
-          } else {
-            // Real error (e.g., wrong ID, network issue) -> Stop everything
-            throw err;
-          }
+        // 1. Initialize LIFF (Guaranteed ONCE)
+        if (!liffInitPromise) {
+          liffInitPromise = liff.init({ liffId });
         }
+        await liffInitPromise;
 
-        // 3. Check Authentication
+        // 2. Check Authentication
         if (!liff.isLoggedIn()) {
-          // If not logged in, redirect to LINE Login screen
-          // We explicitly tell LINE to come back to *this* page after login
+          // Redirect to LINE Login and come back to this exact page
           liff.login({ redirectUri: window.location.href });
-          return; // Stop execution here, browser will redirect away
+          return; // Stop execution, browser will redirect
         }
 
-        // 4. Get Profile Data
+        // 3. Get Profile
         const profile = await liff.getProfile();
 
-        // 5. Server Action: Auto-Login or Auto-Register
+        // 4. Server Action: Login/Register
         const result = await loginOrRegisterLineUser({
           userId: profile.userId,
           displayName: profile.displayName,
@@ -59,21 +49,20 @@ export default function LoginPage() {
         });
 
         if (result.success && result.userId) {
-          // 6. Success! Redirect to Dashboard
           router.push(`/dashboard?userId=${result.userId}`);
         } else {
-          throw new Error(result.message || 'Login failed');
+          throw new Error(result.message || 'Login failed at server.');
         }
       } catch (err: any) {
         console.error('LIFF Error:', err);
         setStatus('error');
-        setErrorMsg(err.message || 'Failed to initialize.');
-        // Allow user to retry if it was a glitch
-        isRunning.current = false;
+        setErrorMsg(err.message || 'An unexpected error occurred.');
+        // If init failed, we clear the promise so the user can try again
+        liffInitPromise = null;
       }
     };
 
-    initAndLogin();
+    runAuth();
   }, [router]);
 
   // --- RENDER UI ---
@@ -94,7 +83,6 @@ export default function LoginPage() {
     );
   }
 
-  // Default Loading State
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
       <div className="relative flex flex-col items-center">
