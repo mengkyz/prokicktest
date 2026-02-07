@@ -25,6 +25,11 @@ export async function verifyAndProcessPayment(formData: FormData) {
     return { success: false, message: 'Missing required data.' };
   }
 
+  // Security Check: Ensure file is not empty
+  if (file.size === 0) {
+    return { success: false, message: 'File is empty.' };
+  }
+
   try {
     // 1. Fetch EXPECTED Price
     let expectedPrice = 0;
@@ -48,11 +53,18 @@ export async function verifyAndProcessPayment(formData: FormData) {
       expectedPrice = pkg.package_templates.extra_session_price;
     }
 
-    // 2. Call SlipOK API
+    // 2. Call SlipOK API (With Fix for Production)
+    // -----------------------------------------------------------------
+    // FIX: Convert File Stream to Buffer to ensure data isn't lost in transit
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
     const slipFormData = new FormData();
-    slipFormData.append('files', file);
+    // IMPORTANT: The 3rd argument (file.name) is REQUIRED by SlipOK
+    slipFormData.append('files', new Blob([buffer]), file.name);
     slipFormData.append('log', 'true');
     slipFormData.append('amount', expectedPrice.toString());
+    // -----------------------------------------------------------------
 
     const response = await fetch(
       `https://api.slipok.com/api/line/apikey/${SLIPOK_BRANCH_ID}`,
