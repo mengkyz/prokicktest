@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Standard Client is all we need now!
+// Standard Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -12,6 +12,9 @@ const supabase = createClient(
 const SLIPOK_BRANCH_ID = process.env.SLIPOK_BRANCH_ID!;
 const SLIPOK_API_KEY = process.env.SLIPOK_API_KEY!;
 
+// -----------------------------------------------------------------------------
+// PAYMENT VERIFICATION LOGIC (Existing)
+// -----------------------------------------------------------------------------
 export async function verifyAndProcessPayment(formData: FormData) {
   const file = formData.get('slip') as File;
   const userId = formData.get('userId') as string;
@@ -82,8 +85,7 @@ export async function verifyAndProcessPayment(formData: FormData) {
       result.code,
     );
 
-    // --- NEW: LOGGING VIA RPC ---
-    // We call the database function which has 'God Mode' permissions internally
+    // --- LOGGING VIA RPC ---
     const { error: logError } = await supabase.rpc('log_payment_attempt', {
       p_user_id: userId,
       p_payment_type: type,
@@ -99,7 +101,7 @@ export async function verifyAndProcessPayment(formData: FormData) {
     } else {
       console.log('Payment log saved successfully via RPC.');
     }
-    // ----------------------------
+    // -----------------------
 
     // 4. Handle SlipOK Errors
     if (!result.success) {
@@ -142,5 +144,51 @@ export async function verifyAndProcessPayment(formData: FormData) {
   } catch (error: any) {
     console.error('Payment Error:', error);
     return { success: false, message: 'Server error processing payment.' };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// NEW: AUTO-REGISTRATION LOGIC (VIA RPC)
+// -----------------------------------------------------------------------------
+
+export async function loginOrRegisterLineUser(lineProfile: {
+  userId: string;
+  displayName: string;
+  pictureUrl?: string;
+}) {
+  console.log('--- LINE LOGIN VIA RPC ---', lineProfile.userId);
+
+  try {
+    // Call the database function 'register_line_user'
+    // This function checks if user exists; if not, creates them.
+    const { data, error } = await supabase.rpc('register_line_user', {
+      p_line_user_id: lineProfile.userId,
+      p_display_name: lineProfile.displayName,
+      p_picture_url: lineProfile.pictureUrl || null,
+    });
+
+    if (error) {
+      console.error('RPC Error:', error);
+      return { success: false, message: 'Database error during login.' };
+    }
+
+    // RPC returns a table/array, grab the first row
+    const result = data && data[0] ? data[0] : null;
+
+    if (!result) {
+      return {
+        success: false,
+        message: 'No response from registration system.',
+      };
+    }
+
+    return {
+      success: true,
+      userId: result.user_id,
+      isNew: result.is_new,
+    };
+  } catch (err: any) {
+    console.error('Server Action Error:', err);
+    return { success: false, message: 'System connectivity error.' };
   }
 }

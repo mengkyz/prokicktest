@@ -1,82 +1,81 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import liff from '@line/liff';
+import { loginOrRegisterLineUser } from './actions';
 
 export default function LoginPage() {
-  const [users, setUsers] = useState<any[]>([])
-  const [selectedUser, setSelectedUser] = useState('')
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [status, setStatus] = useState<'loading' | 'error'>('loading');
+  const [errorMsg, setErrorMsg] = useState('');
+  const router = useRouter();
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      // Fetch users AND their children count to identify parents
-      const { data } = await supabase
-        .from('profiles')
-        .select('*, child_profiles(id)')
-        .order('full_name')
-      
-      setUsers(data || [])
-      setLoading(false)
-    }
-    fetchUsers()
-  }, [])
+    const initAndLogin = async () => {
+      try {
+        // 1. Initialize LIFF
+        await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-  const handleLogin = () => {
-    if (selectedUser) {
-      router.push(`/dashboard?userId=${selectedUser}`)
-    }
+        // 2. Force Login if not authenticated
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return; // Stop here, LINE will redirect back after login
+        }
+
+        // 3. Get LINE Profile
+        const profile = await liff.getProfile();
+
+        // 4. Server Action: Auto-Login or Auto-Register
+        const result = await loginOrRegisterLineUser({
+          userId: profile.userId,
+          displayName: profile.displayName,
+          pictureUrl: profile.pictureUrl,
+        });
+
+        if (result.success && result.userId) {
+          // 5. Success! Redirect to Dashboard
+          router.push(`/dashboard?userId=${result.userId}`);
+        } else {
+          throw new Error(result.message || 'Login failed');
+        }
+      } catch (err: any) {
+        console.error('LIFF/Auth Error:', err);
+        setStatus('error');
+        setErrorMsg(err.message || 'Failed to initialize.');
+      }
+    };
+
+    initAndLogin();
+  }, [router]);
+
+  // --- RENDER UI ---
+
+  if (status === 'error') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div className="text-red-500 text-5xl mb-4">⚠️</div>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Login Failed</h2>
+        <p className="text-gray-600 mb-6">{errorMsg}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-2 bg-gray-200 rounded-full text-gray-700 font-medium"
+        >
+          Try Again
+        </button>
+      </div>
+    );
   }
 
+  // Default Loading State (Clean & Professional)
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-extrabold text-blue-900">ProKick Login</h1>
-          <p className="mt-2 text-sm text-gray-500">Select a user profile to simulate access</p>
-        </div>
-
-        {loading ? (
-          <p className="text-center text-gray-400">Loading profiles...</p>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
-              <select
-                className="block w-full pl-3 pr-10 py-3 text-base border border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md text-black"
-                value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
-              >
-                <option value="" disabled>-- Choose a Profile --</option>
-                {users.map((user) => {
-                  const childCount = user.child_profiles?.length || 0
-                  return (
-                    <option key={user.id} value={user.id}>
-                      {user.full_name} {childCount > 0 ? `(👨‍👩‍👧 Parent - ${childCount} kids)` : '(👤 Player)'}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-
-            <button
-              onClick={handleLogin}
-              disabled={!selectedUser}
-              className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-colors
-                ${selectedUser ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'}`}
-            >
-              Enter Dashboard →
-            </button>
-          </div>
-        )}
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
+      <div className="relative">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#06C755]"></div>
+        {/* Optional: Add your Logo in the center if you have one */}
       </div>
+      <p className="mt-6 text-gray-500 font-medium animate-pulse">
+        Authenticating...
+      </p>
     </div>
-  )
+  );
 }
