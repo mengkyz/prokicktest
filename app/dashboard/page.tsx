@@ -4,11 +4,12 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+// Import the Server Action
+import { verifyAndProcessPayment } from '../actions';
 
-// Create Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
 // --- TYPES ---
@@ -25,6 +26,7 @@ type ModalState = {
   message?: string;
   details?: {
     // For Purchases
+    id?: string | number; // Package/Template ID
     packageName?: string;
     price?: number;
     sessions?: number;
@@ -45,7 +47,7 @@ function DashboardContent() {
   // Data State
   const [profile, setProfile] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
-  const [activeProfileId, setActiveProfileId] = useState<string | null>(null); // null = Parent
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
 
   const [packages, setPackages] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
@@ -57,6 +59,9 @@ function DashboardContent() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [processing, setProcessing] = useState(false);
 
+  // Payment State
+  const [selectedSlip, setSelectedSlip] = useState<File | null>(null);
+
   // Modal State
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
@@ -64,7 +69,7 @@ function DashboardContent() {
     title: '',
   });
 
-  // 1. Initial Profile Load
+  // ... (Initial Profile Load & Data Fetch Logic) ...
   useEffect(() => {
     if (!userId) return;
     const init = async () => {
@@ -81,7 +86,6 @@ function DashboardContent() {
         .from('package_templates')
         .select('*')
         .order('price');
-
       setProfile(user);
       setChildren(kids || []);
       setTemplates(temps || []);
@@ -89,11 +93,9 @@ function DashboardContent() {
     init();
   }, [userId]);
 
-  // 2. Fetch Data (Reloadable)
   const loadDashboardData = useCallback(
     async (isBackgroundRefresh = false) => {
       if (!userId) return;
-
       let pkgQuery = supabase
         .from('user_packages')
         .select(`*, package_templates (*)`)
@@ -116,153 +118,122 @@ function DashboardContent() {
         pkgQuery,
         bookingQuery,
       ]);
-
       setPackages(packs || []);
       setBookings(books || []);
-
       setLoading(false);
     },
-    [userId, activeProfileId]
+    [userId, activeProfileId],
   );
 
-  // 3. Effects
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  useEffect(() => {
-    const onFocus = () => loadDashboardData(true);
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [loadDashboardData]);
-
-  // --- HELPERS: DATE FORMATTERS ---
-
-  // Package Expiry: "12 January 2026"
-  const formatExpiryDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
+  // --- HELPERS ---
+  const formatExpiryDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
-  };
-
-  // Booking Ticket: "Tue, 13 Jan 2026"
-  const formatBookingDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
+  const formatBookingDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-GB', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
-  };
+  const getTargetName = () =>
+    activeProfileId
+      ? children.find((c) => c.id === activeProfileId)?.nickname || 'Child'
+      : profile?.nickname || profile?.full_name || 'Myself';
 
-  // Get Target Name
-  const getTargetName = () => {
-    if (activeProfileId) {
-      return (
-        children.find((c) => c.id === activeProfileId)?.nickname || 'Child'
-      );
-    }
-    return profile?.nickname || profile?.full_name || 'Myself';
-  };
+  // --- ACTIONS ---
 
-  // 4. Actions
-
-  // --- BUY EXTRA SESSION FLOW ---
+  // 1. Initiate Buy Extra
   const initiateBuyExtra = (pkg: any) => {
+    setSelectedSlip(null); // Reset slip
     setModal({
       isOpen: true,
       type: 'confirm_extra',
-      title: 'Confirm Purchase',
+      title: 'Top-up Extra Session',
       details: {
-        packageName: `${pkg.package_templates.name} (Extra Session)`,
+        id: pkg.id,
+        packageName: `${pkg.package_templates.name}`,
         price: pkg.package_templates.extra_session_price,
         targetName: getTargetName(),
         sessions: 1,
       },
-      action: () => processBuyExtra(pkg.id),
+      // Note: We do NOT set 'action' here anymore for payments to avoid stale state
     });
   };
 
-  const processBuyExtra = async (packageId: string) => {
-    setModal((prev) => ({ ...prev, isOpen: false }));
-    setProcessing(true);
-
-    const { data, error } = await supabase.rpc('buy_extra_session', {
-      p_user_id: userId,
-      p_package_id: packageId,
-    });
-
-    setProcessing(false);
-
-    if (data?.success) {
-      setModal({
-        isOpen: true,
-        type: 'success',
-        title: 'Payment Successful!',
-        message: 'One extra session has been added to your package.',
-      });
-      loadDashboardData();
-    } else {
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Purchase Failed',
-        message: error?.message || data?.message,
-      });
-    }
-  };
-
-  // --- BUY PACKAGE FLOW ---
+  // 2. Initiate Buy Package
   const initiateBuyPackage = (template: any) => {
+    setSelectedSlip(null); // Reset slip
     setModal({
       isOpen: true,
       type: 'confirm_buy',
       title: 'Confirm Purchase',
       details: {
+        id: template.id,
         packageName: template.name,
         price: template.price,
         sessions: template.session_count,
         validity: template.days_valid,
         targetName: getTargetName(),
       },
-      action: () => processBuyPackage(template.id),
+      // Note: We do NOT set 'action' here anymore for payments
     });
   };
 
-  const processBuyPackage = async (templateId: number) => {
-    setModal((prev) => ({ ...prev, isOpen: false }));
+  // --- UNIFIED PAYMENT PROCESSOR ---
+  const handlePaymentProcess = async (
+    type: 'new_package' | 'extra_session',
+    id: string | number,
+  ) => {
+    // This function will now always see the FRESH selectedSlip state
+    if (!selectedSlip) {
+      alert('Please upload your payment slip first.');
+      return;
+    }
+
     setProcessing(true);
+    setModal((prev) => ({ ...prev, isOpen: false }));
     setShowBuyModal(false);
 
-    const { data, error } = await supabase.rpc('buy_new_package', {
-      p_user_id: userId,
-      p_child_id: activeProfileId,
-      p_template_id: templateId,
-    });
+    // Prepare FormData
+    const formData = new FormData();
+    formData.append('slip', selectedSlip);
+    formData.append('userId', userId!);
+    formData.append('childId', activeProfileId || 'null');
+    formData.append('packageId', id.toString());
+    formData.append('type', type);
+
+    // Call Server Action
+    const result = await verifyAndProcessPayment(formData);
 
     setProcessing(false);
 
-    if (data?.success) {
+    if (result.success) {
       setModal({
         isOpen: true,
         type: 'success',
-        title: 'Payment Successful!',
-        message: 'Your new package is active and ready to use.',
+        title: 'Payment Verified!',
+        message: result.message,
       });
       loadDashboardData();
     } else {
       setModal({
         isOpen: true,
         type: 'error',
-        title: 'Purchase Failed',
-        message: error?.message || data?.message,
+        title: 'Verification Failed',
+        message: result.message,
       });
     }
   };
 
-  // --- CANCEL BOOKING FLOW ---
+  // --- Cancel Booking Logic ---
   const initiateCancelBooking = (booking: any) => {
     setModal({
       isOpen: true,
@@ -277,21 +248,18 @@ function DashboardContent() {
         }),
         location: booking.classes.location,
       },
-      action: () => processCancelBooking(booking.id),
+      action: () => processCancelBooking(booking.id), // We still use action for cancel as it has no file state
     });
   };
 
   const processCancelBooking = async (bookingId: string) => {
     setModal((prev) => ({ ...prev, isOpen: false }));
     setProcessing(true);
-
     const { data, error } = await supabase.rpc('cancel_booking', {
       p_booking_id: bookingId,
       p_user_id: userId,
     });
-
     setProcessing(false);
-
     if (data?.success) {
       setModal({
         isOpen: true,
@@ -310,24 +278,30 @@ function DashboardContent() {
     }
   };
 
-  const isCancellable = (classDateStr: string) => {
-    return (
-      new Date().getTime() <
-      new Date(classDateStr).getTime() - 2 * 60 * 60 * 1000
-    );
+  // --- HANDLER FOR CONFIRM CLICK ---
+  // This routes the click to the correct function with the CURRENT state
+  const handleConfirmClick = () => {
+    if (modal.type === 'confirm_buy' && modal.details?.id) {
+      handlePaymentProcess('new_package', modal.details.id);
+    } else if (modal.type === 'confirm_extra' && modal.details?.id) {
+      handlePaymentProcess('extra_session', modal.details.id);
+    } else if (modal.action) {
+      modal.action();
+    }
   };
 
-  // --- Splitting Bookings ---
+  const isCancellable = (classDateStr: string) =>
+    new Date().getTime() <
+    new Date(classDateStr).getTime() - 2 * 60 * 60 * 1000;
   const now = new Date();
   const upcomingBookings = bookings.filter(
-    (b) => new Date(b.class_date) >= now
+    (b) => new Date(b.class_date) >= now,
   );
   const pastBookings = bookings
     .filter((b) => new Date(b.class_date) < now)
     .reverse();
-
   const availableTemplates = templates.filter((t) =>
-    activeProfileId ? t.type === 'junior' : t.type === 'adult'
+    activeProfileId ? t.type === 'junior' : t.type === 'adult',
   );
 
   if (!profile)
@@ -339,8 +313,8 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
+      {/* ... (Header, Tabs, etc. unchanged) ... */}
       <div className="max-w-5xl mx-auto space-y-8">
-        {/* HEADER */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
           <div>
             <h1 className="text-3xl font-extrabold text-blue-900">
@@ -361,16 +335,10 @@ function DashboardContent() {
           </Link>
         </div>
 
-        {/* PROFILE TABS */}
         <div className="flex space-x-1 bg-gray-200 p-1 rounded-xl overflow-x-auto shadow-inner no-scrollbar">
           <button
             onClick={() => setActiveProfileId(null)}
-            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 
-              ${
-                activeProfileId === null
-                  ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5'
-                  : 'text-gray-600 hover:bg-gray-300/50'
-              }`}
+            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${activeProfileId === null ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5' : 'text-gray-600 hover:bg-gray-300/50'}`}
           >
             👤 My Profile
           </button>
@@ -378,24 +346,17 @@ function DashboardContent() {
             <button
               key={child.id}
               onClick={() => setActiveProfileId(child.id)}
-              className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2
-                ${
-                  activeProfileId === child.id
-                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5'
-                    : 'text-gray-600 hover:bg-gray-300/50'
-                }`}
+              className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${activeProfileId === child.id ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5' : 'text-gray-600 hover:bg-gray-300/50'}`}
             >
               👶 {child.nickname}
             </button>
           ))}
         </div>
 
-        {/* CONTENT */}
         {loading ? (
           <div className="text-center py-20 text-gray-400">Loading data...</div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* LEFT COLUMN: PACKAGES */}
             <div className="lg:col-span-2 space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold text-gray-800">
@@ -408,7 +369,6 @@ function DashboardContent() {
                   <span>+</span> Buy Package
                 </button>
               </div>
-
               {packages.length === 0 ? (
                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-dashed border-gray-300 text-center">
                   <p className="text-gray-500 mb-4">
@@ -472,21 +432,16 @@ function DashboardContent() {
               )}
             </div>
 
-            {/* RIGHT COLUMN: SCHEDULE */}
             <div className="space-y-6">
               <div className="flex items-center">
                 <h2 className="text-xl font-bold text-gray-800">Schedule</h2>
               </div>
-
               <Link
-                href={`/book?userId=${userId}${
-                  activeProfileId ? `&childId=${activeProfileId}` : ''
-                }`}
+                href={`/book?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`}
                 className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center font-bold py-3.5 rounded-xl shadow-md hover:shadow-lg transition transform active:scale-95"
               >
                 + Book New Class
               </Link>
-
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[200px]">
                 {upcomingBookings.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-48 text-gray-400 text-sm">
@@ -497,7 +452,6 @@ function DashboardContent() {
                     {upcomingBookings.map((booking) => {
                       const canCancel = isCancellable(booking.class_date);
                       const isStandby = booking.status === 'standby';
-
                       return (
                         <div
                           key={booking.id}
@@ -507,19 +461,13 @@ function DashboardContent() {
                             <span className="font-bold text-gray-800 text-base whitespace-nowrap">
                               {formatBookingDate(booking.class_date)}
                             </span>
-
                             {isStandby ? (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-yellow-100 text-yellow-800 border border-yellow-200 shadow-sm ml-2">
                                 ⏳ Queue #{booking.standby_order}
                               </span>
                             ) : (
                               <span
-                                className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border shadow-sm ml-2
-                                  ${
-                                    booking.status === 'booked'
-                                      ? 'bg-green-100 text-green-700 border-green-200'
-                                      : 'bg-orange-100 text-orange-700 border-orange-200'
-                                  }`}
+                                className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border shadow-sm ml-2 ${booking.status === 'booked' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}
                               >
                                 {booking.status === 'booked'
                                   ? '✅ Confirmed'
@@ -527,13 +475,12 @@ function DashboardContent() {
                               </span>
                             )}
                           </div>
-
                           <div className="text-sm text-gray-500 mb-3 flex flex-col gap-1">
                             <div className="flex items-center gap-2">
                               <span>
                                 🕒{' '}
                                 {new Date(
-                                  booking.class_date
+                                  booking.class_date,
                                 ).toLocaleTimeString([], {
                                   hour: '2-digit',
                                   minute: '2-digit',
@@ -544,7 +491,6 @@ function DashboardContent() {
                               <span>📍 {booking.classes.location}</span>
                             </div>
                           </div>
-
                           {isStandby && (
                             <div className="mb-3 text-xs bg-yellow-50 text-yellow-800 p-2.5 rounded-lg border border-yellow-100">
                               <p className="font-bold">
@@ -555,24 +501,13 @@ function DashboardContent() {
                                 <strong className="text-black">
                                   #{booking.standby_order}
                                 </strong>
-                                {booking.standby_order === 1
-                                  ? ' (You are next!)'
-                                  : ` (${
-                                      booking.standby_order - 1
-                                    } person ahead)`}
                               </p>
                             </div>
                           )}
-
                           <button
                             onClick={() => initiateCancelBooking(booking)}
                             disabled={!canCancel || processing}
-                            className={`w-full text-center text-xs font-bold py-2.5 rounded-lg border transition
-                              ${
-                                canCancel
-                                  ? 'border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300'
-                                  : 'border-gray-100 text-gray-300 cursor-not-allowed bg-gray-50'
-                              }`}
+                            className={`w-full text-center text-xs font-bold py-2.5 rounded-lg border transition ${canCancel ? 'border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300' : 'border-gray-100 text-gray-300 cursor-not-allowed bg-gray-50'}`}
                           >
                             {canCancel
                               ? 'Cancel Booking'
@@ -584,7 +519,6 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
-
               {pastBookings.length > 0 && (
                 <div className="text-center pt-2">
                   <button
@@ -599,7 +533,7 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* MODAL: PACKAGE SELECTION LIST */}
+        {/* --- MODALS --- */}
         {showBuyModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 relative">
@@ -616,7 +550,6 @@ function DashboardContent() {
                 Choose the best plan for{' '}
                 {activeProfileId ? 'your child' : 'you'}.
               </p>
-
               <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
                 {availableTemplates.map((t) => (
                   <div
@@ -645,57 +578,36 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* MODAL: CONFIRMATION & SUCCESS (SHARED) */}
         {modal.isOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform scale-100 transition-all">
-              {/* Header */}
               <div
-                className={`p-5 flex items-center gap-3 border-b
-                ${
-                  modal.type?.startsWith('confirm')
-                    ? 'bg-blue-50 border-blue-100'
-                    : modal.type === 'success'
-                    ? 'bg-green-50 border-green-100'
-                    : 'bg-red-50 border-red-100'
-                }`}
+                className={`p-5 flex items-center gap-3 border-b ${modal.type?.startsWith('confirm') ? 'bg-blue-50 border-blue-100' : modal.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}
               >
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm
-                  ${
-                    modal.type?.startsWith('confirm')
-                      ? 'bg-white text-blue-600'
-                      : modal.type === 'success'
-                      ? 'bg-white text-green-600'
-                      : 'bg-white text-red-600'
-                  }`}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm ${modal.type?.startsWith('confirm') ? 'bg-white text-blue-600' : modal.type === 'success' ? 'bg-white text-green-600' : 'bg-white text-red-600'}`}
                 >
                   {modal.type === 'success'
                     ? '✓'
                     : modal.type === 'error'
-                    ? '!'
-                    : '?'}
+                      ? '!'
+                      : '?'}
                 </div>
                 <div>
                   <h3
-                    className={`text-lg font-bold
-                    ${
-                      modal.type === 'error' ? 'text-red-900' : 'text-gray-900'
-                    }`}
+                    className={`text-lg font-bold ${modal.type === 'error' ? 'text-red-900' : 'text-gray-900'}`}
                   >
                     {modal.title}
                   </h3>
                 </div>
               </div>
 
-              {/* Body */}
               <div className="p-6">
                 {modal.details ? (
                   <div className="space-y-4">
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-                      {/* --- PURCHASE LAYOUT --- */}
-                      {modal.type?.includes('_buy') ||
-                      modal.type?.includes('_extra') ? (
+                      {modal.type === 'confirm_buy' ||
+                      modal.type === 'confirm_extra' ? (
                         <>
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-400 uppercase">
@@ -705,8 +617,6 @@ function DashboardContent() {
                               {modal.details.packageName}
                             </span>
                           </div>
-
-                          {/* Show 'Sessions' if applicable (Not for Extra Session which is fixed 1) */}
                           {modal.type !== 'confirm_extra' && (
                             <>
                               <div className="flex justify-between items-center">
@@ -727,7 +637,6 @@ function DashboardContent() {
                               </div>
                             </>
                           )}
-
                           <div className="flex justify-between items-center border-t border-gray-200 pt-2 mt-2">
                             <span className="text-xs font-bold text-gray-400 uppercase">
                               Total Price
@@ -736,9 +645,30 @@ function DashboardContent() {
                               ฿{modal.details.price?.toLocaleString()}
                             </span>
                           </div>
+
+                          <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+                            <p className="text-center text-sm font-bold text-gray-700 mb-2">
+                              Scan to Pay & Upload Slip
+                            </p>
+                            {/* Placeholder QR */}
+                            <div className="bg-gray-200 w-32 h-32 mx-auto rounded-lg flex items-center justify-center text-xs text-gray-500 mb-3">
+                              [QR CODE HERE]
+                            </div>
+
+                            <label className="block">
+                              <span className="sr-only">Choose slip</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) =>
+                                  setSelectedSlip(e.target.files?.[0] || null)
+                                }
+                                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              />
+                            </label>
+                          </div>
                         </>
                       ) : (
-                        /* --- BOOKING/CANCEL LAYOUT --- */
                         <>
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-400 uppercase">
@@ -767,15 +697,6 @@ function DashboardContent() {
                         </>
                       )}
                     </div>
-
-                    {modal.details.targetName && (
-                      <div className="text-center text-sm text-gray-500">
-                        Buying for:{' '}
-                        <strong className="text-gray-800">
-                          {modal.details.targetName}
-                        </strong>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <p className="text-gray-600 text-center leading-relaxed">
@@ -784,7 +705,6 @@ function DashboardContent() {
                 )}
               </div>
 
-              {/* Actions */}
               <div className="p-4 bg-gray-50 flex gap-3 border-t border-gray-100">
                 {modal.type?.startsWith('confirm') ? (
                   <>
@@ -795,17 +715,20 @@ function DashboardContent() {
                       Cancel
                     </button>
                     <button
-                      onClick={modal.action}
-                      className={`flex-1 py-3 rounded-xl font-bold text-white shadow-md transition
-                        ${
-                          modal.type === 'confirm_cancel'
-                            ? 'bg-red-600 hover:bg-red-700'
-                            : 'bg-blue-600 hover:bg-blue-700'
-                        }`}
+                      onClick={handleConfirmClick}
+                      disabled={
+                        processing ||
+                        ((modal.type === 'confirm_buy' ||
+                          modal.type === 'confirm_extra') &&
+                          !selectedSlip)
+                      }
+                      className={`flex-1 py-3 rounded-xl font-bold text-white shadow-md transition ${modal.type === 'confirm_cancel' ? 'bg-red-600 hover:bg-red-700' : !selectedSlip && (modal.type === 'confirm_buy' || modal.type === 'confirm_extra') ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
-                      {modal.type === 'confirm_cancel'
-                        ? 'Confirm Cancel'
-                        : 'Confirm Pay'}
+                      {processing
+                        ? 'Processing...'
+                        : modal.type === 'confirm_cancel'
+                          ? 'Confirm Cancel'
+                          : 'Verify & Pay'}
                     </button>
                   </>
                 ) : (
@@ -814,12 +737,7 @@ function DashboardContent() {
                       setModal({ ...modal, isOpen: false });
                       if (modal.action) modal.action();
                     }}
-                    className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition
-                      ${
-                        modal.type === 'success'
-                          ? 'bg-green-600 hover:bg-green-700'
-                          : 'bg-red-600 hover:bg-red-700'
-                      }`}
+                    className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition ${modal.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
                   >
                     Close
                   </button>
@@ -829,7 +747,7 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* MODAL: BOOKING HISTORY */}
+        {/* HISTORY MODAL UNCHANGED */}
         {showHistoryModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[80vh]">
@@ -856,7 +774,6 @@ function DashboardContent() {
                       className="border border-gray-100 rounded-xl p-4 flex justify-between items-center bg-gray-50 opacity-75 hover:opacity-100 transition"
                     >
                       <div>
-                        {/* History Date: Compact format */}
                         <p className="font-bold text-gray-800 text-sm">
                           {formatBookingDate(b.class_date)}
                         </p>
@@ -870,14 +787,7 @@ function DashboardContent() {
                       </div>
                       <div>
                         <span
-                          className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border
-                          ${
-                            b.status === 'booked'
-                              ? 'bg-green-100 text-green-700 border-green-200'
-                              : b.status === 'cancelled'
-                              ? 'bg-red-100 text-red-700 border-red-200'
-                              : 'bg-gray-100 text-gray-600 border-gray-200'
-                          }`}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border ${b.status === 'booked' ? 'bg-green-100 text-green-700 border-green-200' : b.status === 'cancelled' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}
                         >
                           {b.status}
                         </span>
