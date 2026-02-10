@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 // Import the Server Action
 import { verifyAndProcessPayment } from '../actions';
@@ -43,6 +43,7 @@ type ModalState = {
 function DashboardContent() {
   const searchParams = useSearchParams();
   const userId = searchParams.get('userId');
+  const router = useRouter();
 
   // Data State
   const [profile, setProfile] = useState<any>(null);
@@ -69,15 +70,43 @@ function DashboardContent() {
     title: '',
   });
 
-  // ... (Initial Profile Load & Data Fetch Logic) ...
+  // ---------------------------------------------------------------------------
+  // 1. INITIAL LOAD + SELF-HEALING LOGIC
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!userId) return;
+    // Safety check: If no userId in URL, go to login
+    if (!userId) {
+      router.replace('/');
+      return;
+    }
+
     const init = async () => {
-      const { data: user } = await supabase
+      console.log('--- DASHBOARD INIT ---', userId);
+
+      // A. Fetch the Profile
+      const { data: user, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
+
+      // --- CRITICAL FIX: SELF-HEALING ---
+      // If the user was deleted from DB but LocalStorage still has the ID,
+      // Supabase returns null/error. We must catch this to stop the "Loading..." stall.
+      if (error || !user) {
+        console.warn('⚠️ User ID invalid or deleted. Resetting app state.');
+
+        // 1. Kill the "Fast Pass" cache
+        localStorage.removeItem('prokick_user_id');
+        localStorage.removeItem('prokick_line_token');
+
+        // 2. Force redirect to Login to create a new account
+        router.replace('/');
+        return;
+      }
+      // ----------------------------------
+
+      // B. Fetch Children & Templates (Only if user exists)
       const { data: kids } = await supabase
         .from('child_profiles')
         .select('*')
@@ -86,44 +115,50 @@ function DashboardContent() {
         .from('package_templates')
         .select('*')
         .order('price');
+
       setProfile(user);
       setChildren(kids || []);
       setTemplates(temps || []);
     };
+
     init();
-  }, [userId]);
+  }, [userId, router]);
 
-  const loadDashboardData = useCallback(
-    async (isBackgroundRefresh = false) => {
-      if (!userId) return;
-      let pkgQuery = supabase
-        .from('user_packages')
-        .select(`*, package_templates (*)`)
-        .eq('status', 'active');
-      let bookingQuery = supabase
-        .from('bookings')
-        .select(`*, classes (*), child_profiles(nickname)`)
-        .neq('status', 'cancelled')
-        .order('class_date', { ascending: true });
+  // ---------------------------------------------------------------------------
+  // 2. DASHBOARD DATA REFRESH
+  // ---------------------------------------------------------------------------
+  const loadDashboardData = useCallback(async () => {
+    // Don't run if profile isn't loaded yet
+    if (!userId || !profile) return;
 
-      if (activeProfileId) {
-        pkgQuery = pkgQuery.eq('child_id', activeProfileId);
-        bookingQuery = bookingQuery.eq('child_id', activeProfileId);
-      } else {
-        pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
-        bookingQuery = bookingQuery.eq('user_id', userId).is('child_id', null);
-      }
+    setLoading(true);
 
-      const [{ data: packs }, { data: books }] = await Promise.all([
-        pkgQuery,
-        bookingQuery,
-      ]);
-      setPackages(packs || []);
-      setBookings(books || []);
-      setLoading(false);
-    },
-    [userId, activeProfileId],
-  );
+    let pkgQuery = supabase
+      .from('user_packages')
+      .select(`*, package_templates (*)`)
+      .eq('status', 'active');
+    let bookingQuery = supabase
+      .from('bookings')
+      .select(`*, classes (*), child_profiles(nickname)`)
+      .neq('status', 'cancelled')
+      .order('class_date', { ascending: true });
+
+    if (activeProfileId) {
+      pkgQuery = pkgQuery.eq('child_id', activeProfileId);
+      bookingQuery = bookingQuery.eq('child_id', activeProfileId);
+    } else {
+      pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
+      bookingQuery = bookingQuery.eq('user_id', userId).is('child_id', null);
+    }
+
+    const [{ data: packs }, { data: books }] = await Promise.all([
+      pkgQuery,
+      bookingQuery,
+    ]);
+    setPackages(packs || []);
+    setBookings(books || []);
+    setLoading(false);
+  }, [userId, activeProfileId, profile]);
 
   useEffect(() => {
     loadDashboardData();
@@ -164,7 +199,6 @@ function DashboardContent() {
         targetName: getTargetName(),
         sessions: 1,
       },
-      // Note: We do NOT set 'action' here anymore for payments to avoid stale state
     });
   };
 
@@ -183,7 +217,6 @@ function DashboardContent() {
         validity: template.days_valid,
         targetName: getTargetName(),
       },
-      // Note: We do NOT set 'action' here anymore for payments
     });
   };
 
@@ -307,7 +340,11 @@ function DashboardContent() {
   if (!profile)
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Loading Profile...
+        {/* Simple Loading Screen while we check if user exists */}
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          Loading Profile...
+        </div>
       </div>
     );
 
@@ -330,6 +367,11 @@ function DashboardContent() {
           <Link
             href="/"
             className="text-sm font-medium text-red-500 hover:text-red-700 transition"
+            onClick={() => {
+              // Clear cache on explicit logout
+              localStorage.removeItem('prokick_user_id');
+              localStorage.removeItem('prokick_line_token');
+            }}
           >
             Sign Out
           </Link>
