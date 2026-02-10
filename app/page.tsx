@@ -24,7 +24,7 @@ export default function LoginPage() {
         // If we have a stored UserID from a previous visit, use it immediately.
         // This makes the app feel "Native" and instant.
         const cachedUserId = localStorage.getItem('prokick_user_id');
-        const cachedLineId = localStorage.getItem('prokick_line_token'); // Optional safety check
+        // const cachedLineId = localStorage.getItem('prokick_line_token'); // Optional safety check
 
         if (cachedUserId) {
           console.log('⚡ Fast Pass Login');
