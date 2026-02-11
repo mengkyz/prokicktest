@@ -13,6 +13,58 @@ const SLIPOK_BRANCH_ID = process.env.SLIPOK_BRANCH_ID!;
 const SLIPOK_API_KEY = process.env.SLIPOK_API_KEY!;
 
 // -----------------------------------------------------------------------------
+// PROFILE MANAGEMENT ACTIONS
+// -----------------------------------------------------------------------------
+
+export async function createChildProfile(formData: FormData) {
+  const parentId = formData.get('parentId') as string;
+  const nickname = formData.get('nickname') as string;
+  const weight = formData.get('weight') as string;
+  const height = formData.get('height') as string;
+  const size = formData.get('size') as string;
+  const birthDate = formData.get('birthDate') as string;
+
+  const { error } = await supabase.rpc('create_child_profile', {
+    p_parent_id: parentId,
+    p_nickname: nickname,
+    p_weight: weight || null,
+    p_height: height || null,
+    p_jersey_size: size || null,
+    p_birth_date: birthDate || null,
+  });
+
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+}
+
+export async function updateProfile(formData: FormData) {
+  const id = formData.get('id') as string;
+  const isChild = formData.get('isChild') === 'true';
+  const nickname = formData.get('nickname') as string;
+  const fullName = formData.get('fullName') as string;
+  const phone = formData.get('phone') as string;
+  const weight = formData.get('weight') as string;
+  const height = formData.get('height') as string;
+  const size = formData.get('size') as string;
+  const birthDate = formData.get('birthDate') as string;
+
+  const { error } = await supabase.rpc('update_profile_data', {
+    p_id: id,
+    p_is_child: isChild,
+    p_nickname: nickname,
+    p_full_name: fullName || null,
+    p_phone_number: phone || null,
+    p_weight: weight || null,
+    p_height: height || null,
+    p_jersey_size: size || null,
+    p_birth_date: birthDate || null,
+  });
+
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+}
+
+// -----------------------------------------------------------------------------
 // PAYMENT VERIFICATION LOGIC
 // -----------------------------------------------------------------------------
 export async function verifyAndProcessPayment(formData: FormData) {
