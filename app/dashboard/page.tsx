@@ -3,9 +3,29 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-// Import the Server Action
+import { Kanit } from 'next/font/google';
+import {
+  Bell,
+  User,
+  CalendarDays,
+  CreditCard,
+  CalendarCheck,
+  Users,
+  CheckCircle2,
+  ChevronRight,
+  ChevronLeft,
+  Cpu,
+  X,
+} from 'lucide-react';
+import BottomNav from '@/components/BottomNav';
 import { verifyAndProcessPayment } from '../actions';
+
+// --- FONT CONFIG ---
+const kanit = Kanit({
+  subsets: ['thai', 'latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+});
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,28 +35,10 @@ const supabase = createClient(
 // --- TYPES ---
 type ModalState = {
   isOpen: boolean;
-  type:
-    | 'confirm_buy'
-    | 'confirm_extra'
-    | 'confirm_cancel'
-    | 'success'
-    | 'error'
-    | null;
+  type: 'confirm_extra' | 'confirm_cancel' | 'success' | 'error' | null;
   title: string;
   message?: string;
-  details?: {
-    // For Purchases
-    id?: string | number; // Package/Template ID
-    packageName?: string;
-    price?: number;
-    sessions?: number;
-    validity?: number;
-    targetName?: string;
-    // For Bookings
-    date?: string;
-    time?: string;
-    location?: string;
-  };
+  details?: any;
   action?: () => void;
 };
 
@@ -49,18 +51,15 @@ function DashboardContent() {
   const [profile, setProfile] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
-
   const [packages, setPackages] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
 
   // UI State
+  const [currentPkgIdx, setCurrentPkgIdx] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showBuyModal, setShowBuyModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showProfileSelector, setShowProfileSelector] = useState(false);
   const [processing, setProcessing] = useState(false);
-
-  // Payment State
   const [selectedSlip, setSelectedSlip] = useState<File | null>(null);
 
   // Modal State
@@ -70,73 +69,49 @@ function DashboardContent() {
     title: '',
   });
 
-  // ---------------------------------------------------------------------------
-  // 1. INITIAL LOAD + SELF-HEALING LOGIC
-  // ---------------------------------------------------------------------------
+  // 1. INITIAL LOAD
   useEffect(() => {
-    // Safety check: If no userId in URL, go to login
     if (!userId) {
       router.replace('/');
       return;
     }
-
     const init = async () => {
-      console.log('--- DASHBOARD INIT ---', userId);
-
-      // A. Fetch the Profile
       const { data: user, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
-
-      // --- CRITICAL FIX: SELF-HEALING ---
-      // If the user was deleted from DB but LocalStorage still has the ID,
-      // Supabase returns null/error. We must catch this to stop the "Loading..." stall.
       if (error || !user) {
-        console.warn('⚠️ User ID invalid or deleted. Resetting app state.');
-
-        // 1. Kill the "Fast Pass" cache
         localStorage.removeItem('prokick_user_id');
         localStorage.removeItem('prokick_line_token');
-
-        // 2. Force redirect to Login to create a new account
         router.replace('/');
         return;
       }
-      // ----------------------------------
-
-      // B. Fetch Children & Templates (Only if user exists)
       const { data: kids } = await supabase
         .from('child_profiles')
         .select('*')
         .eq('parent_id', userId);
-      const { data: temps } = await supabase
-        .from('package_templates')
-        .select('*')
-        .order('price');
-
       setProfile(user);
       setChildren(kids || []);
-      setTemplates(temps || []);
     };
-
     init();
   }, [userId, router]);
 
-  // ---------------------------------------------------------------------------
-  // 2. DASHBOARD DATA REFRESH
-  // ---------------------------------------------------------------------------
+  // 2. DATA REFRESH
   const loadDashboardData = useCallback(async () => {
-    // Don't run if profile isn't loaded yet
     if (!userId || !profile) return;
-
     setLoading(true);
 
+    const nowStr = new Date().toISOString();
+
+    // Fetch Packages
     let pkgQuery = supabase
       .from('user_packages')
       .select(`*, package_templates (*)`)
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .gt('expiry_date', nowStr);
+
+    // Fetch Bookings
     let bookingQuery = supabase
       .from('bookings')
       .select(`*, classes (*), child_profiles(nickname)`)
@@ -155,7 +130,9 @@ function DashboardContent() {
       pkgQuery,
       bookingQuery,
     ]);
+
     setPackages(packs || []);
+    setCurrentPkgIdx(0);
     setBookings(books || []);
     setLoading(false);
   }, [userId, activeProfileId, profile]);
@@ -165,29 +142,66 @@ function DashboardContent() {
   }, [loadDashboardData]);
 
   // --- HELPERS ---
-  const formatExpiryDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  const formatBookingDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-GB', {
-      weekday: 'short',
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('th-TH', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
-  const getTargetName = () =>
-    activeProfileId
-      ? children.find((c) => c.id === activeProfileId)?.nickname || 'Child'
-      : profile?.nickname || profile?.full_name || 'Myself';
+
+  const formatBookingDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('th-TH', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+  const isCancellable = (classDateStr: string) =>
+    new Date().getTime() <
+    new Date(classDateStr).getTime() - 2 * 60 * 60 * 1000;
+
+  const now = new Date();
+
+  // Categorize Bookings
+  const futureBookings = bookings.filter((b) => new Date(b.class_date) >= now);
+
+  const waitlistBookings = futureBookings
+    .filter((b) => b.status === 'standby')
+    .sort(
+      (a, b) =>
+        new Date(a.class_date).getTime() - new Date(b.class_date).getTime(),
+    );
+
+  const confirmedBookings = futureBookings
+    .filter((b) => b.status === 'booked')
+    .sort(
+      (a, b) =>
+        new Date(a.class_date).getTime() - new Date(b.class_date).getTime(),
+    );
+
+  const pastBookings = bookings
+    .filter((b) => new Date(b.class_date) < now)
+    .reverse();
+
+  // Carousel Logic
+  const activePackage = packages[currentPkgIdx];
+  const nextPackage = () => {
+    if (currentPkgIdx < packages.length - 1)
+      setCurrentPkgIdx((prev) => prev + 1);
+  };
+  const prevPackage = () => {
+    if (currentPkgIdx > 0) setCurrentPkgIdx((prev) => prev - 1);
+  };
 
   // --- ACTIONS ---
+  const handleSwitchProfile = (id: string | null) => {
+    setActiveProfileId(id);
+    setShowProfileSelector(false);
+  };
 
-  // 1. Initiate Buy Extra
   const initiateBuyExtra = (pkg: any) => {
-    setSelectedSlip(null); // Reset slip
+    setSelectedSlip(null);
     setModal({
       isOpen: true,
       type: 'confirm_extra',
@@ -196,46 +210,22 @@ function DashboardContent() {
         id: pkg.id,
         packageName: `${pkg.package_templates.name}`,
         price: pkg.package_templates.extra_session_price,
-        targetName: getTargetName(),
         sessions: 1,
       },
     });
   };
 
-  // 2. Initiate Buy Package
-  const initiateBuyPackage = (template: any) => {
-    setSelectedSlip(null); // Reset slip
-    setModal({
-      isOpen: true,
-      type: 'confirm_buy',
-      title: 'Confirm Purchase',
-      details: {
-        id: template.id,
-        packageName: template.name,
-        price: template.price,
-        sessions: template.session_count,
-        validity: template.days_valid,
-        targetName: getTargetName(),
-      },
-    });
-  };
-
-  // --- UNIFIED PAYMENT PROCESSOR ---
   const handlePaymentProcess = async (
-    type: 'new_package' | 'extra_session',
+    type: 'extra_session',
     id: string | number,
   ) => {
-    // This function will now always see the FRESH selectedSlip state
     if (!selectedSlip) {
       alert('Please upload your payment slip first.');
       return;
     }
-
     setProcessing(true);
     setModal((prev) => ({ ...prev, isOpen: false }));
-    setShowBuyModal(false);
 
-    // Prepare FormData
     const formData = new FormData();
     formData.append('slip', selectedSlip);
     formData.append('userId', userId!);
@@ -243,45 +233,62 @@ function DashboardContent() {
     formData.append('packageId', id.toString());
     formData.append('type', type);
 
-    // Call Server Action
     const result = await verifyAndProcessPayment(formData);
-
     setProcessing(false);
 
-    if (result.success) {
-      setModal({
-        isOpen: true,
-        type: 'success',
-        title: 'Payment Verified!',
-        message: result.message,
-      });
-      loadDashboardData();
-    } else {
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Verification Failed',
-        message: result.message,
-      });
-    }
+    setModal({
+      isOpen: true,
+      type: result.success ? 'success' : 'error',
+      title: result.success ? 'Payment Verified!' : 'Verification Failed',
+      message: result.message,
+    });
+    if (result.success) loadDashboardData();
   };
 
-  // --- Cancel Booking Logic ---
+  const handleDevBypass = async () => {
+    if (!modal.details) return;
+    setProcessing(true);
+
+    const formData = new FormData();
+    const dummyFile = new File(['dev_bypass'], 'dev_bypass.txt', {
+      type: 'text/plain',
+    });
+
+    formData.append('slip', dummyFile);
+    formData.append('userId', userId!);
+    formData.append('childId', activeProfileId || 'null');
+    formData.append('packageId', modal.details.id.toString());
+    formData.append('type', 'extra_session');
+    formData.append('dev_bypass', 'true');
+
+    const result = await verifyAndProcessPayment(formData);
+    setProcessing(false);
+
+    setModal({
+      isOpen: true,
+      type: result.success ? 'success' : 'error',
+      title: result.success ? 'Dev Purchase Success' : 'Dev Purchase Failed',
+      message: result.message,
+    });
+
+    if (result.success) loadDashboardData();
+  };
+
   const initiateCancelBooking = (booking: any) => {
     setModal({
       isOpen: true,
       type: 'confirm_cancel',
-      title: 'Cancel Booking',
-      message: 'Are you sure you want to cancel this session?',
+      title: 'ยกเลิกการจอง?',
+      message: 'คุณแน่ใจหรือไม่ที่จะยกเลิกคลาสนี้?',
       details: {
         date: formatBookingDate(booking.class_date),
-        time: new Date(booking.class_date).toLocaleTimeString([], {
+        time: new Date(booking.class_date).toLocaleTimeString('th-TH', {
           hour: '2-digit',
           minute: '2-digit',
         }),
         location: booking.classes.location,
       },
-      action: () => processCancelBooking(booking.id), // We still use action for cancel as it has no file state
+      action: () => processCancelBooking(booking.id),
     });
   };
 
@@ -297,8 +304,8 @@ function DashboardContent() {
       setModal({
         isOpen: true,
         type: 'success',
-        title: 'Booking Cancelled',
-        message: 'Your session has been cancelled successfully.',
+        title: 'ยกเลิกสำเร็จ',
+        message: 'คืนสิทธิ์การจองเรียบร้อยแล้ว',
       });
       loadDashboardData();
     } else {
@@ -311,540 +318,481 @@ function DashboardContent() {
     }
   };
 
-  // --- HANDLER FOR CONFIRM CLICK ---
-  // This routes the click to the correct function with the CURRENT state
-  const handleConfirmClick = () => {
-    if (modal.type === 'confirm_buy' && modal.details?.id) {
-      handlePaymentProcess('new_package', modal.details.id);
-    } else if (modal.type === 'confirm_extra' && modal.details?.id) {
-      handlePaymentProcess('extra_session', modal.details.id);
-    } else if (modal.action) {
-      modal.action();
-    }
-  };
-
-  const isCancellable = (classDateStr: string) =>
-    new Date().getTime() <
-    new Date(classDateStr).getTime() - 2 * 60 * 60 * 1000;
-  const now = new Date();
-  const upcomingBookings = bookings.filter(
-    (b) => new Date(b.class_date) >= now,
-  );
-  const pastBookings = bookings
-    .filter((b) => new Date(b.class_date) < now)
-    .reverse();
-  const availableTemplates = templates.filter((t) =>
-    activeProfileId ? t.type === 'junior' : t.type === 'adult',
-  );
-
   if (!profile)
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        {/* Simple Loading Screen while we check if user exists */}
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          Loading Profile...
-        </div>
+      <div className="min-h-screen flex items-center justify-center text-[#1e2e5c] font-bold">
+        Loading...
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      {/* ... (Header, Tabs, etc. unchanged) ... */}
-      <div className="max-w-5xl mx-auto space-y-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
-          <div>
-            <h1 className="text-3xl font-extrabold text-blue-900">
-              ProKick Dashboard
-            </h1>
-            <p className="text-gray-500">
-              Welcome back,{' '}
-              <span className="font-semibold text-blue-600">
-                {profile.full_name}
-              </span>
-            </p>
-          </div>
-          <Link
-            href="/"
-            className="text-sm font-medium text-red-500 hover:text-red-700 transition"
-            onClick={() => {
-              // Clear cache on explicit logout
-              localStorage.removeItem('prokick_user_id');
-              localStorage.removeItem('prokick_line_token');
-            }}
-          >
-            Sign Out
-          </Link>
-        </div>
-
-        <div className="flex space-x-1 bg-gray-200 p-1 rounded-xl overflow-x-auto shadow-inner no-scrollbar">
-          <button
-            onClick={() => setActiveProfileId(null)}
-            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${activeProfileId === null ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5' : 'text-gray-600 hover:bg-gray-300/50'}`}
-          >
-            👤 My Profile
-          </button>
-          {children.map((child) => (
-            <button
-              key={child.id}
-              onClick={() => setActiveProfileId(child.id)}
-              className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${activeProfileId === child.id ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5' : 'text-gray-600 hover:bg-gray-300/50'}`}
-            >
-              👶 {child.nickname}
+    <div
+      className={`min-h-screen bg-gray-50 flex justify-center ${kanit.className} overflow-hidden`}
+    >
+      <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-screen">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide">
+          {/* Header */}
+          <div className="px-6 pt-6 pb-2 flex justify-between items-center bg-white sticky top-0 z-20 backdrop-blur-sm bg-white/90">
+            <div className="w-10 h-10 bg-gradient-to-tr from-[#1e2e5c] to-[#3b4d80] rounded-xl flex items-center justify-center rotate-3 shadow-lg">
+              <div className="w-5 h-5 border-2 border-white/90 -rotate-3"></div>
+            </div>
+            <button className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors relative">
+              <Bell className="text-gray-600" size={20} />
+              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
             </button>
-          ))}
-        </div>
+          </div>
 
-        {loading ? (
-          <div className="text-center py-20 text-gray-400">Loading data...</div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-800">
-                  {activeProfileId ? "Child's Packages" : 'My Packages'}
-                </h2>
-                <button
-                  onClick={() => setShowBuyModal(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition flex items-center gap-1"
-                >
-                  <span>+</span> Buy Package
-                </button>
-              </div>
-              {packages.length === 0 ? (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-dashed border-gray-300 text-center">
-                  <p className="text-gray-500 mb-4">
-                    No active packages found.
-                  </p>
-                  <button
-                    onClick={() => setShowBuyModal(true)}
-                    className="text-blue-600 font-bold hover:underline"
-                  >
-                    Get Started &rarr;
-                  </button>
+          <div className="px-5 space-y-6 mt-2">
+            {/* Profile Card with Switcher */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center text-white overflow-hidden">
+                  {profile.picture_url ? (
+                    <img
+                      src={profile.picture_url}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User size={32} className="text-gray-400" />
+                  )}
                 </div>
-              ) : (
-                packages.map((pkg) => (
-                  <div
-                    key={pkg.id}
-                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group hover:shadow-md transition"
-                  >
-                    <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-2xl font-bold text-gray-900">
-                          {pkg.package_templates.name}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Expires: {formatExpiryDate(pkg.expiry_date)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-4xl font-extrabold text-blue-600">
-                          {pkg.remaining_sessions}
-                        </span>
-                        <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-                          Sessions
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                          Extras: {pkg.extra_sessions_purchased}/2
-                        </span>
-                      </div>
-                      {pkg.extra_sessions_purchased < 2 ? (
-                        <button
-                          onClick={() => initiateBuyExtra(pkg)}
-                          disabled={processing}
-                          className="text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition"
-                        >
-                          ⚡ Buy Extra (฿
-                          {pkg.package_templates.extra_session_price})
-                        </button>
-                      ) : (
-                        <span className="text-xs text-orange-500 font-medium bg-orange-50 px-2 py-1 rounded">
-                          Max Extras Reached
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 leading-tight">
+                    {activeProfileId
+                      ? children.find((c) => c.id === activeProfileId)?.nickname
+                      : profile.full_name}
+                  </h2>
+                  <p className="text-gray-400 text-sm font-light mt-0.5">
+                    {activeProfileId ? 'นักกีฬารุ่นจิ๋ว ⚽' : 'ผู้ปกครอง 👨‍👩‍👧'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProfileSelector(true)}
+                className="text-xs text-gray-600 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors"
+              >
+                สลับโปรไฟล์
+              </button>
+            </div>
+
+            {/* Active Package Card (No ACTIVE Badge) */}
+            {loading ? (
+              <div className="bg-gray-50 rounded-2xl p-5 h-36 animate-pulse border border-gray-100"></div>
+            ) : activePackage ? (
+              <div className="relative">
+                {packages.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevPackage}
+                      disabled={currentPkgIdx === 0}
+                      className={`absolute left-0 top-1/2 -translate-y-1/2 -ml-2 z-10 p-1.5 rounded-full bg-white shadow-md border border-gray-100 text-gray-600 transition-opacity ${currentPkgIdx === 0 ? 'opacity-0 pointer-events-none' : ''}`}
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button
+                      onClick={nextPackage}
+                      disabled={currentPkgIdx === packages.length - 1}
+                      className={`absolute right-0 top-1/2 -translate-y-1/2 -mr-2 z-10 p-1.5 rounded-full bg-white shadow-md border border-gray-100 text-gray-600 transition-opacity ${currentPkgIdx === packages.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </>
+                )}
+
+                <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/50 rounded-bl-full -mr-16 -mt-16"></div>
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-bold text-gray-800 text-lg tracking-tight">
+                        {activePackage.package_templates.name}
+                      </h3>
+                      {packages.length > 1 && (
+                        <span className="text-[10px] text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">
+                          {currentPkgIdx + 1}/{packages.length}
                         </span>
                       )}
                     </div>
+
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <p className="text-gray-500 text-xs font-medium uppercase tracking-wider mb-1">
+                          Sessions Left
+                        </p>
+                        <p className="text-[#1e2e5c] font-black text-4xl leading-none">
+                          {activePackage.remaining_sessions}{' '}
+                          <span className="text-lg text-gray-400 font-normal ml-1">
+                            / {activePackage.package_templates.session_count}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] text-gray-500 font-medium">
+                          Extra:{' '}
+                          <span
+                            className={
+                              activePackage.extra_sessions_purchased >= 2
+                                ? 'text-red-500'
+                                : 'text-blue-600'
+                            }
+                          >
+                            {activePackage.extra_sessions_purchased}
+                          </span>
+                          /2
+                        </span>
+                        {activePackage.extra_sessions_purchased < 2 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              initiateBuyExtra(activePackage);
+                            }}
+                            className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-colors border border-indigo-100"
+                          >
+                            <span>+ Top-up</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 mt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <CalendarDays size={12} /> Start:{' '}
+                        {formatDate(activePackage.created_at)}
+                      </span>
+                      <span className="flex items-center gap-1 font-medium text-gray-500">
+                        Exp: {formatDate(activePackage.expiry_date)}
+                      </span>
+                    </div>
                   </div>
-                ))
-              )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center hover:border-blue-300 transition-colors">
+                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-500">
+                  <CreditCard size={24} />
+                </div>
+                <p className="text-gray-500 text-sm font-medium mb-4">
+                  ยังไม่มีแพ็กเกจที่ใช้งานอยู่
+                </p>
+                <button
+                  onClick={() =>
+                    router.push(
+                      `/packages?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`,
+                    )
+                  }
+                  className="text-white bg-[#1e2e5c] px-6 py-2 rounded-lg text-sm font-bold shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                >
+                  ซื้อแพ็กเกจเลย
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() =>
+                  router.push(
+                    `/book?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`,
+                  )
+                }
+                className="bg-gradient-to-r from-[#1e2e5c] to-[#2b4185] text-white rounded-xl py-4 px-4 flex flex-col items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 group"
+              >
+                <div className="bg-white/20 p-2 rounded-full group-hover:bg-white/30 transition-colors">
+                  <CalendarCheck size={20} />
+                </div>
+                <span className="font-bold text-sm tracking-wide">
+                  จองคลาสเรียน
+                </span>
+              </button>
+              <button
+                onClick={() =>
+                  router.push(
+                    `/packages?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`,
+                  )
+                }
+                className="bg-white text-[#1e2e5c] border-2 border-[#1e2e5c]/10 rounded-xl py-4 px-4 flex flex-col items-center justify-center gap-2 shadow-sm hover:shadow-md hover:border-[#1e2e5c]/30 hover:bg-blue-50/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 group"
+              >
+                <div className="text-[#1e2e5c] p-2 bg-blue-50 rounded-full group-hover:bg-white transition-colors">
+                  <CreditCard size={20} />
+                </div>
+                <span className="font-bold text-sm tracking-wide">
+                  รายละเอียดแพ็กเกจ
+                </span>
+              </button>
             </div>
 
-            <div className="space-y-6">
-              <div className="flex items-center">
-                <h2 className="text-xl font-bold text-gray-800">Schedule</h2>
-              </div>
-              <Link
-                href={`/book?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`}
-                className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center font-bold py-3.5 rounded-xl shadow-md hover:shadow-lg transition transform active:scale-95"
-              >
-                + Book New Class
-              </Link>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[200px]">
-                {upcomingBookings.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-gray-400 text-sm">
-                    <p>No upcoming classes.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {upcomingBookings.map((booking) => {
-                      const canCancel = isCancellable(booking.class_date);
-                      const isStandby = booking.status === 'standby';
-                      return (
-                        <div
-                          key={booking.id}
-                          className="p-4 hover:bg-gray-50 transition"
-                        >
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="font-bold text-gray-800 text-base whitespace-nowrap">
-                              {formatBookingDate(booking.class_date)}
-                            </span>
-                            {isStandby ? (
-                              <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-yellow-100 text-yellow-800 border border-yellow-200 shadow-sm ml-2">
-                                ⏳ Queue #{booking.standby_order}
-                              </span>
-                            ) : (
-                              <span
-                                className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border shadow-sm ml-2 ${booking.status === 'booked' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}
-                              >
-                                {booking.status === 'booked'
-                                  ? '✅ Confirmed'
-                                  : booking.status}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500 mb-3 flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <span>
-                                🕒{' '}
-                                {new Date(
-                                  booking.class_date,
-                                ).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-gray-400">
-                              <span>📍 {booking.classes.location}</span>
-                            </div>
-                          </div>
-                          {isStandby && (
-                            <div className="mb-3 text-xs bg-yellow-50 text-yellow-800 p-2.5 rounded-lg border border-yellow-100">
-                              <p className="font-bold">
-                                You are on the Waiting List.
-                              </p>
-                              <p className="mt-0.5">
-                                Position:{' '}
-                                <strong className="text-black">
-                                  #{booking.standby_order}
-                                </strong>
-                              </p>
-                            </div>
-                          )}
-                          <button
-                            onClick={() => initiateCancelBooking(booking)}
-                            disabled={!canCancel || processing}
-                            className={`w-full text-center text-xs font-bold py-2.5 rounded-lg border transition ${canCancel ? 'border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300' : 'border-gray-100 text-gray-300 cursor-not-allowed bg-gray-50'}`}
-                          >
-                            {canCancel
-                              ? 'Cancel Booking'
-                              : 'Too Late to Cancel'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              {pastBookings.length > 0 && (
-                <div className="text-center pt-2">
+            {/* --- BOOKING SECTIONS (Reordered) --- */}
+
+            {/* 1. Upcoming Bookings Section (Moved Up) */}
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  การจองที่กำลังมาถึง
+                  {confirmedBookings.length > 0 && (
+                    <span className="bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                      {confirmedBookings.length}
+                    </span>
+                  )}
+                </h3>
+                {pastBookings.length > 0 && (
                   <button
                     onClick={() => setShowHistoryModal(true)}
-                    className="text-sm text-gray-400 hover:text-blue-600 hover:underline transition"
+                    className="text-xs font-semibold text-gray-400 hover:text-[#1e2e5c] flex items-center gap-1 transition-colors"
                   >
-                    View past bookings history
+                    ดูประวัติ <ChevronRight size={14} />
                   </button>
-                </div>
-              )}
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {confirmedBookings.length === 0 ? (
+                  <div className="text-center py-10 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+                    <p className="text-gray-400 text-sm">
+                      ไม่มีรายการจองเร็วๆ นี้
+                    </p>
+                  </div>
+                ) : (
+                  confirmedBookings.map((b) => (
+                    <BookingCard
+                      key={b.id}
+                      booking={b}
+                      activePackage={activePackage}
+                      onCancel={() => initiateCancelBooking(b)}
+                      processing={processing}
+                    />
+                  ))
+                )}
+              </div>
             </div>
+
+            {/* 2. Waitlist Section (Moved Down) */}
+            {waitlistBookings.length > 0 && (
+              <div>
+                <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  แจ้งเตือนสถานะการรอคิว
+                  <span className="bg-yellow-500 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                    {waitlistBookings.length}
+                  </span>
+                </h3>
+                <div className="space-y-4">
+                  {waitlistBookings.map((b) => (
+                    <BookingCard
+                      key={b.id}
+                      booking={b}
+                      activePackage={activePackage}
+                      onCancel={() => initiateCancelBooking(b)}
+                      processing={processing}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Shared Bottom Nav */}
+        <BottomNav />
 
         {/* --- MODALS --- */}
-        {showBuyModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 relative">
-              <button
-                onClick={() => setShowBuyModal(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition"
-              >
-                ✕
-              </button>
-              <h2 className="text-2xl font-bold text-gray-900 mb-1">
-                Select a Package
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Choose the best plan for{' '}
-                {activeProfileId ? 'your child' : 'you'}.
-              </p>
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                {availableTemplates.map((t) => (
-                  <div
-                    key={t.id}
-                    className="border border-gray-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-500 hover:bg-blue-50/30 transition group cursor-pointer"
-                    onClick={() => initiateBuyPackage(t)}
-                  >
-                    <div>
-                      <h3 className="font-bold text-gray-800 group-hover:text-blue-700">
-                        {t.name}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {t.session_count} Sessions • {t.days_valid} Days
-                      </p>
-                    </div>
-                    <button
-                      disabled={processing}
-                      className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold group-hover:bg-blue-600 transition shadow-sm"
-                    >
-                      ฿{t.price.toLocaleString()}
-                    </button>
+
+        {/* Profile Switcher */}
+        {showProfileSelector && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900">
+                  เลือกโปรไฟล์
+                </h3>
+                <button
+                  onClick={() => setShowProfileSelector(false)}
+                  className="p-1 bg-gray-100 rounded-full"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleSwitchProfile(null)}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl border transition-all ${!activeProfileId ? 'border-[#1e2e5c] bg-blue-50' : 'border-gray-100 hover:bg-gray-50'}`}
+                >
+                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
+                    <User size={20} />
                   </div>
+                  <div className="text-left">
+                    <p className="font-bold text-gray-900">
+                      {profile?.full_name}
+                    </p>
+                    <p className="text-xs text-gray-500">ผู้ปกครอง</p>
+                  </div>
+                  {!activeProfileId && (
+                    <CheckCircle2
+                      className="ml-auto text-[#1e2e5c]"
+                      size={20}
+                    />
+                  )}
+                </button>
+                {children.map((child) => (
+                  <button
+                    key={child.id}
+                    onClick={() => handleSwitchProfile(child.id)}
+                    className={`w-full flex items-center gap-4 p-3 rounded-xl border transition-all ${activeProfileId === child.id ? 'border-[#1e2e5c] bg-blue-50' : 'border-gray-100 hover:bg-gray-50'}`}
+                  >
+                    <div className="w-10 h-10 bg-[#c9b038] rounded-full flex items-center justify-center text-white font-bold">
+                      {child.nickname?.[0]}
+                    </div>
+                    <div className="text-left">
+                      <p className="font-bold text-gray-900">
+                        {child.nickname}
+                      </p>
+                      <p className="text-xs text-gray-500">นักเรียน</p>
+                    </div>
+                    {activeProfileId === child.id && (
+                      <CheckCircle2
+                        className="ml-auto text-[#1e2e5c]"
+                        size={20}
+                      />
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
           </div>
         )}
 
+        {/* Action Modal */}
         {modal.isOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform scale-100 transition-all">
-              <div
-                className={`p-5 flex items-center gap-3 border-b ${modal.type?.startsWith('confirm') ? 'bg-blue-50 border-blue-100' : modal.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}
-              >
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm ${modal.type?.startsWith('confirm') ? 'bg-white text-blue-600' : modal.type === 'success' ? 'bg-white text-green-600' : 'bg-white text-red-600'}`}
-                >
-                  {modal.type === 'success'
-                    ? '✓'
-                    : modal.type === 'error'
-                      ? '!'
-                      : '?'}
-                </div>
-                <div>
-                  <h3
-                    className={`text-lg font-bold ${modal.type === 'error' ? 'text-red-900' : 'text-gray-900'}`}
-                  >
-                    {modal.title}
-                  </h3>
-                </div>
-              </div>
-
-              <div className="p-6">
-                {modal.details ? (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-                      {modal.type === 'confirm_buy' ||
-                      modal.type === 'confirm_extra' ? (
-                        <>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-gray-400 uppercase">
-                              Item
-                            </span>
-                            <span className="text-sm font-bold text-gray-900">
-                              {modal.details.packageName}
-                            </span>
-                          </div>
-                          {modal.type !== 'confirm_extra' && (
-                            <>
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-gray-400 uppercase">
-                                  Sessions
-                                </span>
-                                <span className="text-sm font-bold text-gray-900">
-                                  {modal.details.sessions}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-gray-400 uppercase">
-                                  Validity
-                                </span>
-                                <span className="text-sm font-bold text-gray-900">
-                                  {modal.details.validity} Days
-                                </span>
-                              </div>
-                            </>
-                          )}
-                          <div className="flex justify-between items-center border-t border-gray-200 pt-2 mt-2">
-                            <span className="text-xs font-bold text-gray-400 uppercase">
-                              Total Price
-                            </span>
-                            <span className="text-lg font-black text-blue-600">
-                              ฿{modal.details.price?.toLocaleString()}
-                            </span>
-                          </div>
-
-                          <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
-                            <p className="text-center text-sm font-bold text-gray-700 mb-2">
-                              Scan to Pay & Upload Slip
-                            </p>
-                            {/* Placeholder QR */}
-                            <div className="bg-gray-200 w-32 h-32 mx-auto rounded-lg flex items-center justify-center text-xs text-gray-500 mb-3">
-                              [QR CODE HERE]
-                            </div>
-
-                            <label className="block">
-                              <span className="sr-only">Choose slip</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) =>
-                                  setSelectedSlip(e.target.files?.[0] || null)
-                                }
-                                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                              />
-                            </label>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-gray-400 uppercase">
-                              Date
-                            </span>
-                            <span className="text-sm font-bold text-gray-900">
-                              {modal.details.date}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-gray-400 uppercase">
-                              Time
-                            </span>
-                            <span className="text-sm font-bold text-gray-900">
-                              {modal.details.time}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-gray-400 uppercase">
-                              Location
-                            </span>
-                            <span className="text-sm font-bold text-gray-900">
-                              {modal.details.location}
-                            </span>
-                          </div>
-                        </>
-                      )}
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
+              <h3 className="text-xl font-bold mb-4 font-['Kanit'] text-gray-900">
+                {modal.title}
+              </h3>
+              {modal.type?.startsWith('confirm') ? (
+                <>
+                  {modal.type === 'confirm_extra' && (
+                    <div className="space-y-2 mb-4 text-sm">
+                      <div className="flex justify-between">
+                        <span>สินค้า</span>
+                        <span className="font-bold">
+                          {modal.details?.packageName}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>ราคา</span>
+                        <span className="font-bold text-[#1e2e5c]">
+                          ฿{modal.details?.price?.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="mt-4">
+                        <p className="text-xs font-bold text-gray-500 mb-2">
+                          แนบสลิป
+                        </p>
+                        <input
+                          type="file"
+                          onChange={(e) =>
+                            setSelectedSlip(e.target.files?.[0] || null)
+                          }
+                          className="text-xs w-full"
+                        />
+                      </div>
                     </div>
+                  )}
+                  {modal.type === 'confirm_cancel' && (
+                    <p className="text-gray-600 mb-6">{modal.message}</p>
+                  )}
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setModal({ ...modal, isOpen: false })}
+                        className="flex-1 py-3 rounded-xl border font-bold text-gray-500"
+                      >
+                        ยกเลิก
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (modal.type === 'confirm_extra')
+                            handlePaymentProcess(
+                              'extra_session',
+                              modal.details.id,
+                            );
+                          else if (modal.action) modal.action();
+                        }}
+                        className={`flex-1 py-3 rounded-xl font-bold text-white ${modal.type === 'confirm_cancel' ? 'bg-red-500' : 'bg-[#1e2e5c]'}`}
+                        disabled={
+                          modal.type === 'confirm_extra' && !selectedSlip
+                        }
+                      >
+                        {processing ? '...' : 'ยืนยัน'}
+                      </button>
+                    </div>
+                    {modal.type === 'confirm_extra' && (
+                      <button
+                        onClick={handleDevBypass}
+                        disabled={processing}
+                        className="w-full py-2 rounded-xl bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center gap-2"
+                      >
+                        <Cpu size={14} /> Dev Buy (Bypass Slip)
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-gray-600 text-center leading-relaxed">
-                    {modal.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="p-4 bg-gray-50 flex gap-3 border-t border-gray-100">
-                {modal.type?.startsWith('confirm') ? (
-                  <>
-                    <button
-                      onClick={() => setModal({ ...modal, isOpen: false })}
-                      className="flex-1 py-3 rounded-xl font-bold text-gray-600 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleConfirmClick}
-                      disabled={
-                        processing ||
-                        ((modal.type === 'confirm_buy' ||
-                          modal.type === 'confirm_extra') &&
-                          !selectedSlip)
-                      }
-                      className={`flex-1 py-3 rounded-xl font-bold text-white shadow-md transition ${modal.type === 'confirm_cancel' ? 'bg-red-600 hover:bg-red-700' : !selectedSlip && (modal.type === 'confirm_buy' || modal.type === 'confirm_extra') ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-                    >
-                      {processing
-                        ? 'Processing...'
-                        : modal.type === 'confirm_cancel'
-                          ? 'Confirm Cancel'
-                          : 'Verify & Pay'}
-                    </button>
-                  </>
-                ) : (
+                </>
+              ) : (
+                <div className="text-center">
+                  <p className="mb-6 text-gray-600">{modal.message}</p>
                   <button
                     onClick={() => {
                       setModal({ ...modal, isOpen: false });
-                      if (modal.action) modal.action();
+                      if (modal.type === 'success') window.location.reload();
                     }}
-                    className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition ${modal.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+                    className="w-full py-3 bg-[#1e2e5c] text-white rounded-xl font-bold"
                   >
-                    Close
+                    ตกลง
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* HISTORY MODAL UNCHANGED */}
+        {/* History Modal */}
         {showHistoryModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                <h2 className="text-lg font-bold text-gray-900">
-                  Booking History
-                </h2>
-                <button
-                  onClick={() => setShowHistoryModal(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none"
-                >
-                  ×
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full max-h-[70vh] flex flex-col shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-xl text-gray-900">
+                  ประวัติการจอง
+                </h3>
+                <button onClick={() => setShowHistoryModal(false)}>
+                  <CheckCircle2
+                    className="rotate-180 text-gray-500"
+                    size={18}
+                  />
                 </button>
               </div>
-              <div className="overflow-y-auto p-4 space-y-3">
+              <div className="overflow-y-auto space-y-3 flex-1 pr-1 custom-scrollbar">
                 {pastBookings.length === 0 ? (
-                  <p className="text-center text-gray-400 py-8">
-                    No past bookings found.
-                  </p>
+                  <p className="text-gray-400 text-center">ไม่มีประวัติ</p>
                 ) : (
                   pastBookings.map((b) => (
                     <div
                       key={b.id}
-                      className="border border-gray-100 rounded-xl p-4 flex justify-between items-center bg-gray-50 opacity-75 hover:opacity-100 transition"
+                      className="text-xs border border-gray-100 p-4 rounded-xl flex justify-between items-center"
                     >
                       <div>
-                        <p className="font-bold text-gray-800 text-sm">
+                        <div className="font-bold text-gray-800 text-sm mb-0.5">
                           {formatBookingDate(b.class_date)}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {new Date(b.class_date).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}{' '}
-                          • {b.classes.location}
-                        </p>
+                        </div>
+                        <div className="text-gray-500">
+                          {b.classes.location}
+                        </div>
                       </div>
-                      <div>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border ${b.status === 'booked' ? 'bg-green-100 text-green-700 border-green-200' : b.status === 'cancelled' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}
-                        >
-                          {b.status}
-                        </span>
-                      </div>
+                      <span
+                        className={`px-2.5 py-1 rounded-lg font-bold ${b.status === 'booked' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                      >
+                        {b.status}
+                      </span>
                     </div>
                   ))
                 )}
-              </div>
-              <div className="p-4 border-t bg-gray-50 text-center">
-                <button
-                  onClick={() => setShowHistoryModal(false)}
-                  className="text-sm font-bold text-blue-600 hover:text-blue-800"
-                >
-                  Close
-                </button>
               </div>
             </div>
           </div>
@@ -854,12 +802,91 @@ function DashboardContent() {
   );
 }
 
+// Helper Component for Booking Cards (to avoid code duplication)
+const BookingCard = ({ booking, activePackage, onCancel, processing }: any) => {
+  const isStandby = booking.status === 'standby';
+  const canCancel =
+    new Date().getTime() <
+    new Date(booking.class_date).getTime() - 2 * 60 * 60 * 1000;
+
+  // Time helpers
+  const formatBookingDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('th-TH', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  const getBookingTimeRange = (booking: any) => {
+    const start = new Date(booking.classes.start_time);
+    const end = new Date(booking.classes.end_time);
+    const format = (d: Date) =>
+      d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    return `${format(start)} - ${format(end)} น.`;
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+      <div
+        className={`absolute left-0 top-0 bottom-0 w-1.5 ${isStandby ? 'bg-yellow-400' : 'bg-[#1e2e5c]'}`}
+      ></div>
+      <div className="flex justify-between items-start mb-4 pl-2">
+        <div>
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide mb-1 inline-block ${isStandby ? 'bg-yellow-50 text-yellow-700' : 'bg-blue-50 text-blue-700'}`}
+          >
+            {isStandby ? 'Waitlist' : 'Confirmed'}
+          </span>
+          <h4 className="font-bold text-gray-800 text-base">
+            {activePackage?.package_templates.name || 'Football Session'}
+          </h4>
+        </div>
+        {isStandby && (
+          <div className="text-center bg-yellow-100 text-yellow-800 rounded-lg px-2 py-1">
+            <span className="block text-[10px] font-bold uppercase">Queue</span>
+            <span className="block text-lg font-black leading-none">
+              #{booking.standby_order}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* UPDATED: Detailed Info with Labels */}
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm text-gray-600 mb-4 pl-2">
+        <span className="font-medium text-gray-500">วัน:</span>
+        <span className="text-gray-700 font-medium">
+          {formatBookingDate(booking.class_date)}
+        </span>
+
+        <span className="font-medium text-gray-500">เวลา:</span>
+        <span className="text-gray-700">{getBookingTimeRange(booking)}</span>
+
+        <span className="font-medium text-gray-500">สนาม:</span>
+        <span className="text-gray-700">{booking.classes.location}</span>
+
+        <span className="font-medium text-gray-500">โค้ช:</span>
+        <span className="text-gray-700">
+          {booking.classes.instructor || 'Coach'}
+        </span>
+      </div>
+
+      <button
+        onClick={onCancel}
+        disabled={!canCancel || processing}
+        className={`w-full font-bold py-3 rounded-xl text-xs transition-all duration-200 border ${canCancel ? 'bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 border-gray-200 hover:border-red-200 shadow-sm hover:shadow' : 'bg-gray-50 text-gray-300 border-transparent cursor-not-allowed'}`}
+      >
+        {canCancel ? 'จัดการ / ยกเลิกการจอง' : 'ยกเลิกไม่ได้ (ใกล้เวลาเรียน)'}
+      </button>
+    </div>
+  );
+};
+
 export default function Dashboard() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-blue-600 font-bold">
-          Loading ProKick...
+        <div className="min-h-screen flex items-center justify-center text-[#1e2e5c] font-bold">
+          Loading...
         </div>
       }
     >

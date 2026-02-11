@@ -3,25 +3,40 @@
 import { useEffect, useState, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Kanit } from 'next/font/google';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Clock,
+  MapPin,
+  UserCircle2,
+  Users,
+  User,
+  CheckCircle2,
+  X,
+  CreditCard,
+  RefreshCw,
+} from 'lucide-react';
+import BottomNav from '@/components/BottomNav';
+
+const kanit = Kanit({
+  subsets: ['thai', 'latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+});
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-// --- TYPES ---
 type ModalState = {
   isOpen: boolean;
   type: 'confirm' | 'success' | 'standby_success' | 'error' | null;
   title: string;
   message?: string;
-  details?: {
-    date: string;
-    time: string;
-    location: string;
-    packageName?: string;
-    queuePosition?: number;
-  };
+  details?: any;
   action?: () => void;
 };
 
@@ -32,177 +47,159 @@ function BookSessionContent() {
   const userId = searchParams.get('userId');
   const childId = searchParams.get('childId');
 
-  // Data State
+  // --- DATA STATE ---
+  const [profile, setProfile] = useState<any>(null); // Current Active Profile
+  const [children, setChildren] = useState<any[]>([]); // For Switcher
+  const [parentProfile, setParentProfile] = useState<any>(null); // For Switcher
+
   const [classes, setClasses] = useState<any[]>([]);
   const [activePackages, setActivePackages] = useState<any[]>([]);
-  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(
-    null
-  );
 
-  // Status State
-  const [standbyCounts, setStandbyCounts] = useState<Record<string, number>>(
-    {}
-  );
-  const [userBookings, setUserBookings] = useState<Record<string, string>>({});
+  // --- UI SELECTION STATE ---
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedField, setSelectedField] = useState<string>('all');
+  const [showProfileSelector, setShowProfileSelector] = useState(false);
 
-  // User Info State
-  const [childName, setChildName] = useState<string>('');
-  const [parentName, setParentName] = useState<string>('');
-
+  // --- STATUS STATE ---
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [standbyCounts, setStandbyCounts] = useState<Record<string, number>>(
+    {},
+  );
+  const [userBookings, setUserBookings] = useState<Record<string, string>>({}); // ClassID -> Status
 
-  // Modal State
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
     type: null,
     title: '',
   });
 
-  // 1. Initial Fetch
+  // 1. INITIAL LOAD & PROFILE SYNC
   useEffect(() => {
     if (!userId) return;
 
     const init = async () => {
       setLoading(true);
 
-      // A. Get Future Classes
-      const { data: classData } = await supabase
-        .from('classes')
+      // A. Fetch Parent & Children (For Switcher)
+      const { data: parent } = await supabase
+        .from('profiles')
         .select('*')
-        .gt('start_time', new Date().toISOString())
-        .order('start_time');
+        .eq('id', userId)
+        .single();
+      const { data: kids } = await supabase
+        .from('child_profiles')
+        .select('*')
+        .eq('parent_id', userId);
 
-      setClasses(classData || []);
+      setParentProfile(parent);
+      setChildren(kids || []);
 
-      // B. Get Standby Counts
-      const { data: standbyData } = await supabase
-        .from('bookings')
-        .select('class_id')
-        .eq('status', 'standby')
-        .gt('class_date', new Date().toISOString());
-
-      const counts: Record<string, number> = {};
-      if (standbyData) {
-        standbyData.forEach((b: any) => {
-          counts[b.class_id] = (counts[b.class_id] || 0) + 1;
-        });
-      }
-      setStandbyCounts(counts);
-
-      // C. Get User's EXISTING Bookings
-      let bookingQuery = supabase
-        .from('bookings')
-        .select('class_id, status')
-        .neq('status', 'cancelled')
-        .gt('class_date', new Date().toISOString());
-
+      // B. Determine Current Active Profile
       if (childId) {
-        bookingQuery = bookingQuery.eq('child_id', childId);
+        const activeChild = kids?.find((k) => k.id === childId);
+        setProfile(activeChild || parent); // Fallback to parent if child id invalid
       } else {
-        bookingQuery = bookingQuery.eq('user_id', userId).is('child_id', null);
+        setProfile(parent);
       }
 
-      const { data: myBookings } = await bookingQuery;
-      const myBookingMap: Record<string, string> = {};
-      if (myBookings) {
-        myBookings.forEach((b: any) => {
-          myBookingMap[b.class_id] = b.status;
-        });
-      }
-      setUserBookings(myBookingMap);
-
-      // D. Get Active Packages & User Info
-      let pkgQuery = supabase
-        .from('user_packages')
-        .select('*, package_templates(name)')
-        .eq('status', 'active')
-        .gt('remaining_sessions', 0);
-
-      if (childId) {
-        const { data: child } = await supabase
-          .from('child_profiles')
-          .select('nickname')
-          .eq('id', childId)
-          .single();
-        if (child) setChildName(child.nickname);
-        pkgQuery = pkgQuery.eq('child_id', childId);
-      } else {
-        const { data: parent } = await supabase
-          .from('profiles')
-          .select('full_name, nickname')
-          .eq('id', userId)
-          .single();
-        if (parent) setParentName(parent.nickname || parent.full_name);
-        pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
-      }
-
-      const { data: pkgData } = await pkgQuery;
-      const packs = pkgData || [];
-      setActivePackages(packs);
-
-      if (packs.length === 1) setSelectedPackageId(packs[0].id);
+      // C. Fetch Data for Current Profile context
+      await fetchDataForContext(childId);
 
       setLoading(false);
     };
     init();
   }, [userId, childId]);
 
-  // --- Helpers: Date Formatters (MATCHING DASHBOARD) ---
+  // 2. FETCH DATA HELPER
+  const fetchDataForContext = async (currentChildId: string | null) => {
+    // Classes (All future)
+    const { data: classData } = await supabase
+      .from('classes')
+      .select('*')
+      .gt('start_time', new Date().toISOString())
+      .order('start_time');
+    setClasses(classData || []);
 
-  // Format: "Tue, 13 Jan 2026"
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
-      weekday: 'short', // 'Tue'
-      day: 'numeric', // '13'
-      month: 'short', // 'Jan'
-      year: 'numeric', // '2026'
-    });
+    // Standby Counts
+    const { data: standbyData } = await supabase
+      .from('bookings')
+      .select('class_id')
+      .eq('status', 'standby')
+      .gt('class_date', new Date().toISOString());
+    const counts: Record<string, number> = {};
+    standbyData?.forEach(
+      (b: any) => (counts[b.class_id] = (counts[b.class_id] || 0) + 1),
+    );
+    setStandbyCounts(counts);
+
+    // User's Existing Bookings (Prevent double booking same slot)
+    let bookingQuery = supabase
+      .from('bookings')
+      .select('class_id, status')
+      .neq('status', 'cancelled')
+      .gt('class_date', new Date().toISOString());
+    if (currentChildId)
+      bookingQuery = bookingQuery.eq('child_id', currentChildId);
+    else bookingQuery = bookingQuery.eq('user_id', userId).is('child_id', null);
+
+    const { data: myBookings } = await bookingQuery;
+    const myBookingMap: Record<string, string> = {};
+    myBookings?.forEach((b: any) => (myBookingMap[b.class_id] = b.status));
+    setUserBookings(myBookingMap);
+
+    // Active Packages for this Profile
+    let pkgQuery = supabase
+      .from('user_packages')
+      .select('*, package_templates(name)')
+      .eq('status', 'active')
+      .gt('remaining_sessions', 0);
+    if (currentChildId) pkgQuery = pkgQuery.eq('child_id', currentChildId);
+    else pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
+
+    const { data: pkgData } = await pkgQuery;
+    const packs = pkgData || [];
+    setActivePackages(packs);
+    if (packs.length > 0) setSelectedPackageId(packs[0].id);
+    else setSelectedPackageId('');
   };
 
-  const formatPackageDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+  // --- ACTIONS ---
+  const handleSwitchProfile = (newId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (newId) params.set('childId', newId);
+    else params.delete('childId');
+    router.replace(`/book?${params.toString()}`);
+    setShowProfileSelector(false);
   };
 
-  const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  // 2. Handle Booking Flow
   const initiateBooking = (cls: any) => {
     if (!selectedPackageId) {
       setModal({
         isOpen: true,
         type: 'error',
-        title: 'No Package Selected',
-        message: 'Please select a package to use for this booking.',
+        title: 'ไม่พบแพ็กเกจ',
+        message: 'กรุณาเลือกหรือซื้อแพ็กเกจก่อนทำการจอง',
       });
       return;
     }
 
     const selectedPkg = activePackages.find((p) => p.id === selectedPackageId);
     const isStandby = cls.current_bookings >= cls.max_capacity;
+    const currentQueue = standbyCounts[cls.id] || 0;
 
     setModal({
       isOpen: true,
       type: 'confirm',
-      title: isStandby ? 'Join Standby List' : 'Confirm Booking',
-      message: isStandby
-        ? 'This class is currently full. Joining the standby list does not deduct a session immediately.'
-        : 'Please review the details below before confirming.',
+      title: isStandby ? 'ยืนยันการต่อคิว' : 'ยืนยันการจอง',
       details: {
-        date: formatDate(cls.start_time),
-        time: formatTime(cls.start_time),
+        date: new Date(cls.start_time).toLocaleDateString('th-TH'),
+        time: formatTimeRange(cls.start_time),
         location: cls.location,
         packageName: selectedPkg?.package_templates.name,
-        queuePosition: isStandby ? (standbyCounts[cls.id] || 0) + 1 : undefined,
+        queuePosition: isStandby ? currentQueue + 1 : undefined,
       },
       action: () => processBooking(cls.id, cls),
     });
@@ -221,393 +218,442 @@ function BookSessionContent() {
 
     setProcessing(false);
 
-    if (error) {
+    if (error || !data.success) {
       setModal({
         isOpen: true,
         type: 'error',
-        title: 'Booking Failed',
-        message: error.message,
+        title: 'การจองล้มเหลว',
+        message: error?.message || data?.message,
       });
-    } else if (data.success) {
+    } else {
       const isStandby = data.status === 'standby';
-
       setModal({
         isOpen: true,
         type: isStandby ? 'standby_success' : 'success',
-        title: isStandby ? 'Added to Waitlist' : 'Booking Confirmed!',
+        title: isStandby ? 'ลงชื่อสำรองสำเร็จ' : 'จองสำเร็จ!',
         details: {
-          date: formatDate(cls.start_time),
-          time: formatTime(cls.start_time),
+          date: new Date(cls.start_time).toLocaleDateString('th-TH'),
+          time: formatTimeRange(cls.start_time),
           location: cls.location,
           queuePosition: data.queue_position,
         },
-        action: () => router.push(`/dashboard?userId=${userId}`),
-      });
-    } else {
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Booking Failed',
-        message: data.message,
+        action: () => window.location.reload(),
       });
     }
   };
 
+  // --- FILTER LOGIC ---
+  const isSameDay = (d1: Date, d2: Date) =>
+    d1.getDate() === d2.getDate() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getFullYear() === d2.getFullYear();
+  const formatTimeRange = (dateStr: string) => {
+    const start = new Date(dateStr);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    return `${start.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
+  };
+
+  // 1. Filter by Date
+  const dateClasses = classes.filter((c) =>
+    isSameDay(new Date(c.start_time), selectedDate),
+  );
+
+  // 2. Get Unique Fields for Dropdown from Date-Filtered Classes
+  const availableFields = Array.from(
+    new Set(dateClasses.map((c) => c.location)),
+  );
+
+  // 3. Filter by Selected Field
+  const displayClasses =
+    selectedField === 'all'
+      ? dateClasses
+      : dateClasses.filter((c) => c.location === selectedField);
+
+  // Calendar
+  const daysInMonth = Array.from(
+    {
+      length: new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() + 1,
+        0,
+      ).getDate(),
+    },
+    (_, i) =>
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i + 1),
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* HEADER */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Book a Session</h1>
-            <p className="text-gray-500 text-sm mt-1">
-              For:{' '}
-              <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                {childName || parentName || 'Loading...'}
-              </span>
-            </p>
-          </div>
+    <div
+      className={`min-h-screen bg-gray-50 flex justify-center ${kanit.className}`}
+    >
+      <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-screen overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-3 flex items-center sticky top-0 bg-white z-20 shadow-sm">
           <button
             onClick={() => router.back()}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition"
+            className="p-1 -ml-1 text-gray-800 hover:bg-gray-100 rounded-full"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2.5}
-              stroke="currentColor"
-              className="w-5 h-5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-              />
-            </svg>
+            <ChevronLeft size={28} />
           </button>
+          <h1 className="flex-1 text-center text-lg font-bold text-gray-900 pr-8">
+            จองคลาส
+          </h1>
         </div>
 
-        {/* PACKAGE SELECTOR */}
-        {loading ? (
-          <div className="text-center py-10 text-gray-400 animate-pulse">
-            Loading packages...
-          </div>
-        ) : activePackages.length === 0 ? (
-          <div className="bg-red-50 p-6 rounded-2xl border border-red-100 text-center">
-            <p className="text-red-600 font-bold">
-              ⚠ No active packages found.
-            </p>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide px-4 space-y-6 pt-4">
+          {/* 1. Profile Section */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#c9b038] rounded-full flex items-center justify-center text-white overflow-hidden">
+                {profile?.picture_url ? (
+                  <img
+                    src={profile.picture_url}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User size={20} />
+                )}
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">
+                  {profile?.nickname || profile?.full_name}
+                </h2>
+                <p className="text-gray-500 text-[10px]">
+                  {childId ? 'นักเรียน' : 'ผู้ปกครอง'}
+                </p>
+              </div>
+            </div>
             <button
-              onClick={() => router.back()}
-              className="mt-4 bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold shadow-sm"
+              onClick={() => setShowProfileSelector(true)}
+              className="text-xs text-blue-600 font-medium border border-blue-100 bg-blue-50 px-3 py-1.5 rounded-lg flex items-center gap-1"
             >
-              Go Back to Dashboard
+              <RefreshCw size={12} /> สลับโปรไฟล์
             </button>
           </div>
-        ) : (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
-              Select Package
-            </h2>
-            <div className="space-y-3">
-              {activePackages.map((pkg) => (
-                <div
-                  key={pkg.id}
-                  onClick={() => setSelectedPackageId(pkg.id)}
-                  className={`relative flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all group
-                    ${
-                      selectedPackageId === pkg.id
-                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                        : 'border-gray-100 hover:border-blue-300 hover:bg-gray-50'
-                    }`}
+
+          {/* 2. Package Selector */}
+          <div>
+            <label className="text-xs text-gray-500 font-light mb-1.5 block">
+              เลือกแพ็กเกจที่จะใช้
+            </label>
+            {activePackages.length > 0 ? (
+              <div className="relative">
+                <select
+                  value={selectedPackageId}
+                  onChange={(e) => setSelectedPackageId(e.target.value)}
+                  className="w-full appearance-none bg-white border border-[#1e2e5c] text-[#1e2e5c] font-medium rounded-xl py-3 px-4 pr-10 focus:outline-none shadow-sm text-sm"
                 >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center
-                      ${
-                        selectedPackageId === pkg.id
-                          ? 'border-blue-600'
-                          : 'border-gray-300'
-                      }`}
-                    >
-                      {selectedPackageId === pkg.id && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-900">
-                        {pkg.package_templates.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Exp: {formatPackageDate(pkg.expiry_date)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="block font-black text-blue-600 text-xl">
-                      {pkg.remaining_sessions}
-                    </span>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">
-                      Sessions
-                    </span>
-                  </div>
+                  {activePackages.map((pkg) => (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.package_templates.name} (เหลือ{' '}
+                      {pkg.remaining_sessions} ครั้ง)
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1e2e5c] pointer-events-none"
+                  size={18}
+                />
+              </div>
+            ) : (
+              <div
+                onClick={() =>
+                  router.push(
+                    `/packages?userId=${userId}${childId ? `&childId=${childId}` : ''}`,
+                  )
+                }
+                className="border border-dashed border-gray-300 rounded-xl p-3 flex items-center justify-center gap-2 text-gray-400 cursor-pointer hover:bg-gray-50"
+              >
+                <CreditCard size={16} />{' '}
+                <span>ไม่มีแพ็กเกจ (คลิกเพื่อซื้อ)</span>
+              </div>
+            )}
+          </div>
+
+          {/* 3. Calendar */}
+          <div className="border border-gray-100 rounded-2xl shadow-sm p-4 bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() =>
+                  setCurrentMonth(
+                    new Date(
+                      currentMonth.setMonth(currentMonth.getMonth() - 1),
+                    ),
+                  )
+                }
+                className="p-1 text-gray-400"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <span className="text-gray-800 font-bold text-base">
+                {currentMonth.toLocaleDateString('th-TH', {
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </span>
+              <button
+                onClick={() =>
+                  setCurrentMonth(
+                    new Date(
+                      currentMonth.setMonth(currentMonth.getMonth() + 1),
+                    ),
+                  )
+                }
+                className="p-1 text-gray-400"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+            <div className="grid grid-cols-7 text-center mb-2">
+              {['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map((day, i) => (
+                <div key={i} className="text-xs text-gray-400 font-light">
+                  {day}
                 </div>
               ))}
+            </div>
+            <div className="grid grid-cols-7 gap-y-3 gap-x-1 text-center text-sm">
+              {Array.from({
+                length: new Date(
+                  currentMonth.getFullYear(),
+                  currentMonth.getMonth(),
+                  1,
+                ).getDay(),
+              }).map((_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+              {daysInMonth.map((day) => {
+                const isSelected = isSameDay(day, selectedDate);
+                const isToday = isSameDay(day, new Date());
+                const hasClass = classes.some((c) =>
+                  isSameDay(new Date(c.start_time), day),
+                );
+                return (
+                  <div
+                    key={day.toISOString()}
+                    onClick={() => {
+                      setSelectedDate(day);
+                      setSelectedField('all');
+                    }}
+                    className="relative flex flex-col items-center cursor-pointer"
+                  >
+                    <div
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${isSelected ? 'bg-[#1e2e5c] text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'} ${isToday && !isSelected ? 'border border-[#1e2e5c] text-[#1e2e5c]' : ''}`}
+                    >
+                      {day.getDate()}
+                    </div>
+                    {hasClass && !isSelected && (
+                      <div className="absolute -bottom-1 w-1 h-1 bg-red-400 rounded-full"></div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4. Branch Filter (Dynamic) */}
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500 font-light">สนาม</label>
+            <div className="relative">
+              <select
+                value={selectedField}
+                onChange={(e) => setSelectedField(e.target.value)}
+                className="w-full appearance-none bg-white border border-gray-100 rounded-xl py-3 px-4 pr-10 text-gray-800 text-sm font-medium shadow-sm focus:outline-none"
+                disabled={availableFields.length === 0}
+              >
+                <option value="all">ทั้งหมด ({dateClasses.length} คลาส)</option>
+                {availableFields.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                size={18}
+              />
+            </div>
+          </div>
+
+          {/* 5. Class List */}
+          <div>
+            <h2 className="text-base font-bold text-gray-900 mb-3">
+              คลาสวันที่ {selectedDate.getDate()}{' '}
+              {selectedDate.toLocaleDateString('th-TH', { month: 'long' })}
+            </h2>
+            <div className="space-y-3 pb-20">
+              {loading ? (
+                <div className="text-center py-10 text-gray-400">
+                  กำลังโหลด...
+                </div>
+              ) : displayClasses.length === 0 ? (
+                <div className="text-center py-10 border border-dashed border-gray-200 rounded-xl bg-gray-50">
+                  <p className="text-gray-400 text-sm">ไม่มีคลาสเรียน</p>
+                </div>
+              ) : (
+                displayClasses.map((cls) => {
+                  const isFull = cls.current_bookings >= cls.max_capacity;
+                  const myBookingStatus = userBookings[cls.id]; // 'booked' or 'standby'
+                  const isWaitlist =
+                    myBookingStatus === 'standby' ||
+                    (!myBookingStatus && isFull);
+                  const queuePos = standbyCounts[cls.id] || 0;
+
+                  // Logic: Disable if user already has ANY status for this class (booked or standby)
+                  const isDisabled = processing || !!myBookingStatus;
+
+                  let btnLabel = 'จองเลย';
+                  if (myBookingStatus === 'booked') btnLabel = 'จองแล้ว';
+                  else if (myBookingStatus === 'standby')
+                    btnLabel = 'รอคิวอยู่';
+                  else if (isFull)
+                    btnLabel = `ลงชื่อสำรอง (คิวที่ ${queuePos + 1})`;
+
+                  return (
+                    <ClassScheduleCard
+                      key={cls.id}
+                      time={formatTimeRange(cls.start_time)}
+                      field={cls.location}
+                      coach={cls.instructor || 'Pro Coach'}
+                      current={cls.max_capacity - cls.current_bookings}
+                      max={cls.max_capacity}
+                      status={
+                        myBookingStatus
+                          ? 'booked'
+                          : isWaitlist
+                            ? 'waitlist'
+                            : 'available'
+                      }
+                      onAction={() => initiateBooking(cls)}
+                      disabled={isDisabled}
+                      btnLabel={btnLabel}
+                    />
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        <BottomNav />
+
+        {/* --- MODALS --- */}
+
+        {/* Profile Switcher */}
+        {showProfileSelector && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900">เลือกผู้จอง</h3>
+                <button
+                  onClick={() => setShowProfileSelector(false)}
+                  className="p-1 bg-gray-100 rounded-full"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleSwitchProfile(null)}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl border ${!childId ? 'border-[#1e2e5c] bg-blue-50' : 'border-gray-100'}`}
+                >
+                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center">
+                    <User size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-gray-900">
+                      {parentProfile?.full_name}
+                    </p>
+                    <p className="text-xs text-gray-500">ผู้ปกครอง</p>
+                  </div>
+                  {!childId && (
+                    <CheckCircle2
+                      className="ml-auto text-[#1e2e5c]"
+                      size={20}
+                    />
+                  )}
+                </button>
+                {children.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleSwitchProfile(c.id)}
+                    className={`w-full flex items-center gap-4 p-3 rounded-xl border ${childId === c.id ? 'border-[#1e2e5c] bg-blue-50' : 'border-gray-100'}`}
+                  >
+                    <div className="w-10 h-10 bg-[#c9b038] rounded-full flex items-center justify-center text-white font-bold">
+                      {c.nickname[0]}
+                    </div>
+                    <div className="text-left">
+                      <p className="font-bold text-gray-900">{c.nickname}</p>
+                      <p className="text-xs text-gray-500">นักเรียน</p>
+                    </div>
+                    {childId === c.id && (
+                      <CheckCircle2
+                        className="ml-auto text-[#1e2e5c]"
+                        size={20}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* CLASS LIST */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900 pl-1">
-            Upcoming Classes
-          </h2>
-
-          {classes.length === 0 ? (
-            <div className="text-center text-gray-400 py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-              No classes scheduled yet.
-            </div>
-          ) : (
-            classes.map((cls) => {
-              const isFull = cls.current_bookings >= cls.max_capacity;
-              const queueSize = standbyCounts[cls.id] || 0;
-              const myStatus = userBookings[cls.id];
-              const isAlreadyBooked = !!myStatus;
-
-              return (
-                <div
-                  key={cls.id}
-                  className={`bg-white p-5 rounded-2xl shadow-sm border transition relative overflow-hidden
-                  ${
-                    isAlreadyBooked
-                      ? 'border-gray-100 opacity-80'
-                      : 'border-gray-100 hover:border-blue-200 hover:shadow-md'
-                  }`}
-                >
-                  {isAlreadyBooked && (
-                    <div
-                      className={`absolute top-0 left-0 w-1.5 h-full ${
-                        myStatus === 'booked' ? 'bg-green-500' : 'bg-yellow-400'
-                      }`}
-                    />
-                  )}
-
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="pl-2">
-                      <div className="flex items-center gap-3 mb-1">
-                        {/* UPDATED: Full Date with Short Weekday (Matches Dashboard) */}
-                        <span className="font-bold text-lg text-gray-800">
-                          {formatDate(cls.start_time)}
-                        </span>
-                      </div>
-                      <p className="text-gray-500 text-sm flex items-center gap-3">
-                        <span className="font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded text-xs">
-                          ⏰ {formatTime(cls.start_time)}
-                        </span>
-                        <span className="text-gray-400">•</span>
-                        <span>📍 {cls.location}</span>
-                      </p>
-
-                      <div className="mt-3 flex items-center gap-3">
-                        <span
-                          className={`text-xs font-bold px-2 py-1 rounded-md border
-                          ${
-                            isFull
-                              ? 'text-orange-700 bg-orange-50 border-orange-100'
-                              : 'text-blue-700 bg-blue-50 border-blue-100'
-                          }`}
-                        >
-                          {cls.current_bookings}/{cls.max_capacity} Booked
-                        </span>
-
-                        {isFull && (
-                          <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                            <span>👥 {queueSize} waiting</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => initiateBooking(cls)}
-                      disabled={
-                        isAlreadyBooked || processing || !selectedPackageId
-                      }
-                      className={`w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm transition shadow-sm border
-                        ${
-                          isAlreadyBooked
-                            ? myStatus === 'booked'
-                              ? 'bg-green-50 text-green-700 border-green-200 cursor-default'
-                              : 'bg-yellow-50 text-yellow-700 border-yellow-200 cursor-default'
-                            : !selectedPackageId || processing
-                            ? 'bg-gray-100 text-gray-400 border-transparent cursor-not-allowed'
-                            : isFull
-                            ? 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50 hover:border-orange-300'
-                            : 'bg-blue-600 text-white border-transparent hover:bg-blue-700 hover:shadow-md'
-                        }`}
-                    >
-                      {processing
-                        ? 'Processing...'
-                        : isAlreadyBooked
-                        ? myStatus === 'booked'
-                          ? '✅ Booked'
-                          : '⏳ On Waitlist'
-                        : isFull
-                        ? 'Join Standby'
-                        : 'Book Session'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* --- PROFESSIONAL MODAL SYSTEM (Unified with Dashboard) --- */}
+        {/* Confirmation Modal */}
         {modal.isOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform scale-100 transition-all">
-              {/* Header */}
-              <div
-                className={`p-5 flex items-center gap-3 border-b
-                ${
-                  modal.type === 'confirm' && modal.title.includes('Standby')
-                    ? 'bg-orange-50 border-orange-100'
-                    : modal.type === 'confirm'
-                    ? 'bg-blue-50 border-blue-100'
-                    : modal.type === 'standby_success'
-                    ? 'bg-orange-50 border-orange-100'
-                    : modal.type === 'success'
-                    ? 'bg-green-50 border-green-100'
-                    : 'bg-red-50 border-red-100'
-                }`}
-              >
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm
-                  ${
-                    modal.type === 'confirm' && modal.title.includes('Standby')
-                      ? 'bg-white text-orange-600'
-                      : modal.type === 'confirm'
-                      ? 'bg-white text-blue-600'
-                      : modal.type === 'standby_success'
-                      ? 'bg-white text-orange-600'
-                      : modal.type === 'success'
-                      ? 'bg-white text-green-600'
-                      : 'bg-white text-red-600'
-                  }`}
-                >
-                  {modal.type === 'success'
-                    ? '✓'
-                    : modal.type === 'standby_success'
-                    ? '⏳'
-                    : modal.type === 'error'
-                    ? '!'
-                    : '?'}
-                </div>
-                <div>
-                  <h3
-                    className={`text-lg font-bold
-                    ${
-                      modal.type === 'error' ? 'text-red-900' : 'text-gray-900'
-                    }`}
-                  >
-                    {modal.title}
-                  </h3>
-                </div>
-              </div>
-
-              {/* Body */}
-              <div className="p-6">
-                {modal.details ? (
-                  <div className="space-y-4">
-                    {/* Ticket Details Card */}
-                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-400 uppercase">
-                          Date
-                        </span>
-                        <span className="text-sm font-bold text-gray-900">
-                          {modal.details.date}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-400 uppercase">
-                          Time
-                        </span>
-                        <span className="text-sm font-bold text-gray-900">
-                          {modal.details.time}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-400 uppercase">
-                          Location
-                        </span>
-                        <span className="text-sm font-bold text-gray-900">
-                          {modal.details.location}
-                        </span>
-                      </div>
-                    </div>
-
-                    {modal.details.packageName && (
-                      <div className="flex justify-between items-center px-2">
-                        <span className="text-sm text-gray-500">
-                          Package Used:
-                        </span>
-                        <span className="text-sm font-bold text-blue-600">
-                          {modal.details.packageName}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Status Info Box */}
-                    {modal.details.queuePosition ? (
-                      <div className="bg-orange-50 text-orange-800 text-sm p-3 rounded-lg text-center font-medium border border-orange-100">
-                        You will be{' '}
-                        <strong>#{modal.details.queuePosition}</strong> in the
-                        Waiting List.
-                      </div>
-                    ) : (
-                      modal.type === 'confirm' && (
-                        <div className="bg-blue-50 text-blue-800 text-sm p-3 rounded-lg text-center font-medium border border-blue-100">
-                          Session will be deducted upon confirmation.
-                        </div>
-                      )
-                    )}
-
-                    {modal.message && (
-                      <p className="text-center text-gray-500 text-xs mt-2">
-                        {modal.message}
-                      </p>
-                    )}
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
+              <h3 className="text-xl font-bold text-center mb-2 font-['Kanit'] text-gray-900">
+                {modal.title}
+              </h3>
+              {modal.details && (
+                <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm space-y-2 border border-gray-100">
+                  <div className="flex justify-between">
+                    <span>วันที่:</span>{' '}
+                    <span className="font-bold">{modal.details.date}</span>
                   </div>
-                ) : (
-                  <p className="text-gray-600 text-center leading-relaxed">
-                    {modal.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="p-4 bg-gray-50 flex gap-3 border-t border-gray-100">
+                  <div className="flex justify-between">
+                    <span>เวลา:</span>{' '}
+                    <span className="font-bold">{modal.details.time}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>สถานที่:</span>{' '}
+                    <span className="font-bold">{modal.details.location}</span>
+                  </div>
+                  {modal.details.packageName && (
+                    <div className="flex justify-between border-t pt-2 mt-2 text-xs text-gray-500">
+                      <span>แพ็กเกจ:</span>{' '}
+                      <span className="text-blue-600 font-bold">
+                        {modal.details.packageName}
+                      </span>
+                    </div>
+                  )}
+                  {modal.details.queuePosition && (
+                    <div className="bg-orange-100 text-orange-800 text-center p-2 rounded-lg font-bold mt-2">
+                      คิวที่ #{modal.details.queuePosition}
+                    </div>
+                  )}
+                </div>
+              )}
+              {modal.message && (
+                <p className="text-center text-gray-500 mb-6 text-sm">
+                  {modal.message}
+                </p>
+              )}
+              <div className="flex gap-3">
                 {modal.type === 'confirm' ? (
                   <>
                     <button
                       onClick={() => setModal({ ...modal, isOpen: false })}
-                      className="flex-1 py-3 rounded-xl font-bold text-gray-600 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition"
+                      className="flex-1 py-3 rounded-xl border font-bold text-gray-500"
                     >
-                      Cancel
+                      ยกเลิก
                     </button>
                     <button
                       onClick={modal.action}
-                      className={`flex-1 py-3 rounded-xl font-bold text-white shadow-md transition
-                        ${
-                          modal.title.includes('Standby')
-                            ? 'bg-orange-500 hover:bg-orange-600'
-                            : 'bg-blue-600 hover:bg-blue-700'
-                        }`}
+                      className="flex-1 py-3 rounded-xl bg-[#1e2e5c] text-white font-bold"
                     >
-                      Confirm
+                      ยืนยัน
                     </button>
                   </>
                 ) : (
@@ -616,16 +662,9 @@ function BookSessionContent() {
                       setModal({ ...modal, isOpen: false });
                       if (modal.action) modal.action();
                     }}
-                    className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition
-                      ${
-                        modal.type === 'standby_success'
-                          ? 'bg-orange-500 hover:bg-orange-600'
-                          : modal.type === 'success'
-                          ? 'bg-green-600 hover:bg-green-700'
-                          : 'bg-red-600 hover:bg-red-700'
-                      }`}
+                    className="w-full py-3 rounded-xl bg-[#1e2e5c] text-white font-bold"
                   >
-                    Done
+                    ตกลง
                   </button>
                 )}
               </div>
@@ -637,12 +676,64 @@ function BookSessionContent() {
   );
 }
 
+// Sub-Component
+const ClassScheduleCard = ({
+  time,
+  field,
+  coach,
+  current,
+  max,
+  status,
+  onAction,
+  disabled,
+  btnLabel,
+}: any) => {
+  const isWaitlist = status === 'waitlist';
+  const isBooked = status === 'booked';
+
+  return (
+    <div
+      className={`bg-white rounded-xl border p-4 shadow-sm transition-all ${isBooked ? 'border-green-200 bg-green-50/30' : 'border-gray-100'}`}
+    >
+      <div className="flex items-center gap-2 text-gray-800 font-semibold mb-3">
+        <Clock size={16} className="text-gray-500" />
+        <span className="text-sm">{time}</span>
+      </div>
+      <div className="pl-6 space-y-2 mb-4">
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <MapPin size={14} className="text-gray-400" />
+          <span>{field}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <UserCircle2 size={14} className="text-gray-400" />
+          <span>{coach}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <Users size={14} className="text-gray-400" />
+          <span className={isWaitlist ? 'text-red-500 font-medium' : ''}>
+            {isWaitlist
+              ? 'คลาสเต็ม (ลงชื่อสำรอง)'
+              : `ว่าง ${Math.max(0, current)} จาก ${max}`}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={onAction}
+        disabled={disabled}
+        className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm ${isBooked ? 'bg-green-100 text-green-700 cursor-default' : isWaitlist ? 'bg-[#ef4444] text-white' : 'bg-[#1e2e5c] text-white'} ${disabled && !isBooked ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        {btnLabel}
+      </button>
+    </div>
+  );
+};
+
 export default function BookSession() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-blue-600 font-bold">
-          Loading ProKick...
+        <div className="min-h-screen flex items-center justify-center font-bold text-[#1e2e5c]">
+          Loading...
         </div>
       }
     >

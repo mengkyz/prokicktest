@@ -16,11 +16,19 @@ const SLIPOK_API_KEY = process.env.SLIPOK_API_KEY!;
 // PAYMENT VERIFICATION LOGIC
 // -----------------------------------------------------------------------------
 export async function verifyAndProcessPayment(formData: FormData) {
-  const file = formData.get('slip') as File;
   const userId = formData.get('userId') as string;
   const childId = formData.get('childId') as string;
   const packageId = formData.get('packageId') as string;
   const type = formData.get('type') as 'new_package' | 'extra_session';
+  const isDevBypass = formData.get('dev_bypass') === 'true';
+
+  // --- DEV BYPASS SECTION (Remove before Production) ---
+  if (isDevBypass) {
+    return await processDevPayment(userId, childId, packageId, type);
+  }
+  // -----------------------------------------------------
+
+  const file = formData.get('slip') as File;
 
   if (!file || !userId || !packageId) {
     return { success: false, message: 'Missing required data.' };
@@ -130,8 +138,6 @@ export async function loginOrRegisterLineUser(lineProfile: {
   console.log('--- LINE LOGIN VIA RPC ---', lineProfile.userId);
 
   try {
-    // SECURITY NOTE: Since RLS is disabled, we can just call this function.
-    // It will run with the 'anon' user's permissions, which is fine for now.
     const { data, error } = await supabase.rpc('register_line_user', {
       p_line_user_id: lineProfile.userId,
       p_display_name: lineProfile.displayName,
@@ -143,7 +149,6 @@ export async function loginOrRegisterLineUser(lineProfile: {
       return { success: false, message: `Database error: ${error.message}` };
     }
 
-    // RPC returns a table array
     const result = data && data[0] ? data[0] : null;
 
     if (!result) {
@@ -157,5 +162,49 @@ export async function loginOrRegisterLineUser(lineProfile: {
   } catch (err: any) {
     console.error('Server Action Error:', err);
     return { success: false, message: 'System connectivity error.' };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// DEV BYPASS FUNCTION (Temporary)
+// -----------------------------------------------------------------------------
+async function processDevPayment(
+  userId: string,
+  childId: string,
+  packageId: string,
+  type: 'new_package' | 'extra_session',
+) {
+  console.log('--- DEV BYPASS PAYMENT STARTED ---');
+
+  try {
+    let rpcResponse;
+    if (type === 'new_package') {
+      rpcResponse = await supabase.rpc('buy_new_package', {
+        p_user_id: userId,
+        p_child_id: childId === 'null' ? null : childId,
+        p_template_id: parseInt(packageId),
+      });
+    } else {
+      rpcResponse = await supabase.rpc('buy_extra_session', {
+        p_user_id: userId,
+        p_package_id: packageId,
+      });
+    }
+
+    if (rpcResponse.error) {
+      console.error('Dev Bypass Error:', rpcResponse.error);
+      return {
+        success: false,
+        message: `DB Error: ${rpcResponse.error.message}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: 'Dev Purchase Completed (No Slip Checked)',
+    };
+  } catch (error: any) {
+    console.error('Dev Bypass Exception:', error);
+    return { success: false, message: 'Server Exception during Dev Bypass' };
   }
 }
