@@ -52,7 +52,7 @@ function DashboardContent() {
   const [children, setChildren] = useState<any[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [packages, setPackages] = useState<any[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]); // This will now hold ALL bookings
 
   // UI State
   const [currentPkgIdx, setCurrentPkgIdx] = useState(0);
@@ -97,32 +97,47 @@ function DashboardContent() {
     init();
   }, [userId, router]);
 
-  // 2. DATA REFRESH
+  // 2. DATA REFRESH (FIXED LOGIC)
   const loadDashboardData = useCallback(async () => {
     if (!userId || !profile) return;
     setLoading(true);
 
     const nowStr = new Date().toISOString();
 
-    // Fetch Packages
+    // A. Fetch Packages (Active Only)
     let pkgQuery = supabase
       .from('user_packages')
       .select(`*, package_templates (*)`)
       .eq('status', 'active')
       .gt('expiry_date', nowStr);
 
-    // Fetch Bookings
-    let bookingQuery = supabase
-      .from('bookings')
-      .select(`*, classes (*), child_profiles(nickname)`)
-      .neq('status', 'cancelled')
-      .order('class_date', { ascending: true });
-
     if (activeProfileId) {
       pkgQuery = pkgQuery.eq('child_id', activeProfileId);
-      bookingQuery = bookingQuery.eq('child_id', activeProfileId);
     } else {
       pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
+    }
+
+    // B. Fetch Bookings (ALL Future Bookings for this Profile)
+    // We need package info for the card (to show which package was used), so we include it in the select
+    let bookingQuery = supabase
+      .from('bookings')
+      .select(
+        `
+        *, 
+        classes (*), 
+        child_profiles(nickname),
+        user_packages (
+            id,
+            package_templates (name)
+        )
+      `,
+      )
+      .neq('status', 'cancelled')
+      .order('class_date', { ascending: true }); // Closest date first
+
+    if (activeProfileId) {
+      bookingQuery = bookingQuery.eq('child_id', activeProfileId);
+    } else {
       bookingQuery = bookingQuery.eq('user_id', userId).is('child_id', null);
     }
 
@@ -133,7 +148,7 @@ function DashboardContent() {
 
     setPackages(packs || []);
     setCurrentPkgIdx(0);
-    setBookings(books || []);
+    setBookings(books || []); // Now contains all bookings regardless of active package
     setLoading(false);
   }, [userId, activeProfileId, profile]);
 
@@ -163,11 +178,12 @@ function DashboardContent() {
 
   const now = new Date();
 
-  // Categorize Bookings
+  // Categorize Bookings (Sorted by Date Ascending)
   const futureBookings = bookings.filter((b) => new Date(b.class_date) >= now);
 
   const waitlistBookings = futureBookings
     .filter((b) => b.status === 'standby')
+    // Ensure sorting by date even if DB didn't perfectly (though it should)
     .sort(
       (a, b) =>
         new Date(a.class_date).getTime() - new Date(b.class_date).getTime(),
@@ -182,7 +198,7 @@ function DashboardContent() {
 
   const pastBookings = bookings
     .filter((b) => new Date(b.class_date) < now)
-    .reverse();
+    .reverse(); // Most recent past first
 
   // Carousel Logic
   const activePackage = packages[currentPkgIdx];
@@ -523,7 +539,7 @@ function DashboardContent() {
 
             {/* --- BOOKING SECTIONS (Reordered) --- */}
 
-            {/* 1. Upcoming Bookings Section (Moved Up) */}
+            {/* 1. Upcoming Bookings Section */}
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -556,7 +572,9 @@ function DashboardContent() {
                     <BookingCard
                       key={b.id}
                       booking={b}
-                      activePackage={activePackage}
+                      // This assumes you want to show the package name used for THIS specific booking
+                      // If the package is expired or gone, it still shows the name from historical data
+                      activePackage={b.user_packages}
                       onCancel={() => initiateCancelBooking(b)}
                       processing={processing}
                     />
@@ -565,7 +583,7 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* 2. Waitlist Section (Moved Down) */}
+            {/* 2. Waitlist Section */}
             {waitlistBookings.length > 0 && (
               <div>
                 <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -579,7 +597,7 @@ function DashboardContent() {
                     <BookingCard
                       key={b.id}
                       booking={b}
-                      activePackage={activePackage}
+                      activePackage={b.user_packages}
                       onCancel={() => initiateCancelBooking(b)}
                       processing={processing}
                     />
@@ -838,7 +856,7 @@ const BookingCard = ({ booking, activePackage, onCancel, processing }: any) => {
             {isStandby ? 'Waitlist' : 'Confirmed'}
           </span>
           <h4 className="font-bold text-gray-800 text-base">
-            {activePackage?.package_templates.name || 'Football Session'}
+            {activePackage?.package_templates?.name || 'Football Session'}
           </h4>
         </div>
         {isStandby && (
