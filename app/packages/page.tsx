@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   X,
   PackageOpen,
+  AlertCircle,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 
@@ -43,6 +44,9 @@ function PackagesContent() {
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
   const [currentTemplateIdx, setCurrentTemplateIdx] = useState(0);
   const [showProfileSelector, setShowProfileSelector] = useState(false);
+
+  // Logic State: Check if user already has a package
+  const [hasActivePackage, setHasActivePackage] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -82,7 +86,7 @@ function PackagesContent() {
         }
         setCurrentProfile(activeProfile);
 
-        // D. Fetch Packages (Filtered)
+        // D. Fetch Packages (Filtered by type)
         const { data: temps } = await supabase
           .from('package_templates')
           .select('*')
@@ -90,7 +94,25 @@ function PackagesContent() {
           .order('price');
         setTemplates(temps || []);
 
-        // Reset Selection when profile changes
+        // E. Check for EXISTING Active Package (Un-expired)
+        const nowStr = new Date().toISOString();
+        let pkgQuery = supabase
+          .from('user_packages')
+          .select('id') // We just need to know if it exists
+          .eq('status', 'active')
+          .gt('expiry_date', nowStr); // "Un-expired" check
+
+        if (childId) {
+          pkgQuery = pkgQuery.eq('child_id', childId);
+        } else {
+          pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
+        }
+
+        const { data: existingPkgs } = await pkgQuery;
+        const hasActive = existingPkgs && existingPkgs.length > 0;
+        setHasActivePackage(!!hasActive);
+
+        // Reset Selection
         setSelectedTemplate(null);
         setCurrentTemplateIdx(0);
       } catch (error) {
@@ -113,6 +135,9 @@ function PackagesContent() {
   };
 
   const handleSelectPackage = (template: any) => {
+    // If has active package, do nothing (Double check)
+    if (hasActivePackage) return;
+
     // TOGGLE LOGIC: Deselect if clicking the same one
     if (selectedTemplate?.id === template.id) {
       setSelectedTemplate(null);
@@ -149,7 +174,7 @@ function PackagesContent() {
       className={`min-h-screen bg-gray-50 flex justify-center ${kanit.className}`}
     >
       <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-[100dvh] overflow-hidden">
-        {/* 1. HEADER (Fixed at Top) */}
+        {/* 1. HEADER */}
         <div className="px-4 py-3 flex items-center bg-white/95 backdrop-blur-sm z-20 shadow-sm shrink-0 border-b border-gray-50">
           <button
             onClick={() => router.back()}
@@ -162,10 +187,7 @@ function PackagesContent() {
           </h1>
         </div>
 
-        {/* 2. SCROLLABLE CONTENT AREA
-            Everything (including the Total Price) lives here now. 
-            No floating elements covering content.
-        */}
+        {/* 2. SCROLLABLE CONTENT AREA */}
         <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pt-4 space-y-6">
           {/* Profile Card */}
           <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
@@ -196,6 +218,25 @@ function PackagesContent() {
               สลับโปรไฟล์
             </button>
           </div>
+
+          {/* Warning Banner if Active Package Exists */}
+          {hasActivePackage && (
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle
+                size={20}
+                className="text-orange-500 shrink-0 mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-bold text-orange-800">
+                  มีแพ็กเกจใช้งานอยู่แล้ว
+                </p>
+                <p className="text-xs text-orange-600">
+                  ไม่สามารถซื้อแพ็กเกจซ้อนทับได้
+                  กรุณาใช้แพ็กเกจเดิมให้หมดหรือรอให้หมดอายุก่อน
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Packages Carousel */}
           <div>
@@ -265,11 +306,21 @@ function PackagesContent() {
                     </div>
                     <button
                       onClick={() => handleSelectPackage(activeTemplate)}
-                      className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all ${selectedTemplate?.id === activeTemplate.id ? 'bg-[#1e2e5c] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      disabled={hasActivePackage} // DISABLE LOGIC HERE
+                      className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all 
+                        ${
+                          hasActivePackage
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200' // Disabled Style
+                            : selectedTemplate?.id === activeTemplate.id
+                              ? 'bg-[#1e2e5c] text-white shadow-md'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
                     >
-                      {selectedTemplate?.id === activeTemplate.id
-                        ? 'เลือกแล้ว (แตะเพื่อยกเลิก)'
-                        : 'เลือกแพ็กเกจนี้'}
+                      {hasActivePackage
+                        ? 'มีแพ็กเกจใช้งานอยู่แล้ว'
+                        : selectedTemplate?.id === activeTemplate.id
+                          ? 'เลือกแล้ว (แตะเพื่อยกเลิก)'
+                          : 'เลือกแพ็กเกจนี้'}
                     </button>
                   </div>
                 </div>
@@ -282,7 +333,9 @@ function PackagesContent() {
           </div>
 
           {/* Discount Section */}
-          <div>
+          <div
+            className={`${hasActivePackage ? 'opacity-50 pointer-events-none' : ''}`}
+          >
             <label className="text-xs text-gray-600 mb-2 block">
               กรอกโค้ดส่วนลด
             </label>
@@ -290,6 +343,7 @@ function PackagesContent() {
               <input
                 type="text"
                 placeholder="PROKICK2024"
+                disabled={hasActivePackage}
                 className="w-full border border-gray-200 rounded-lg h-12 pl-4 pr-12 text-sm focus:outline-none focus:border-[#1e2e5c]"
               />
               <button className="absolute right-0 top-0 h-12 w-12 bg-[#1e2e5c] rounded-r-lg flex items-center justify-center text-white">
@@ -298,9 +352,7 @@ function PackagesContent() {
             </div>
           </div>
 
-          {/* 3. TOTAL PRICE SECTION (In-Flow)
-             This sits naturally at the end of the list. No overlays. 
-          */}
+          {/* 3. TOTAL PRICE SECTION (In-Flow) */}
           <div className="pt-2">
             <div className="border-t border-gray-100 pt-6">
               {selectedTemplate ? (
@@ -321,22 +373,19 @@ function PackagesContent() {
                 </div>
               ) : (
                 // PLACEHOLDER STATE (Reserved Space)
-                // This keeps the layout stable even when unselected
                 <div className="h-[100px] flex flex-col items-center justify-center text-gray-300 gap-2 border border-dashed border-gray-100 rounded-xl bg-gray-50/50 select-none">
                   <PackageOpen size={24} className="opacity-30" />
                   <span className="text-xs font-light">
-                    กรุณาเลือกแพ็กเกจด้านบน
+                    {hasActivePackage
+                      ? 'ไม่สามารถเลือกแพ็กเกจได้'
+                      : 'กรุณาเลือกแพ็กเกจด้านบน'}
                   </span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* 4. BOTTOM NAV SPACER
-             BottomNav is absolute at the bottom of the screen. 
-             This invisible block ensures the Price Section can scroll up 
-             ABOVE the Bottom Nav, so it's never covered.
-          */}
+          {/* 4. BOTTOM NAV SPACER */}
           <div className="h-[90px] w-full shrink-0"></div>
         </div>
 
