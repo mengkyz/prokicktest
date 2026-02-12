@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   Cpu,
   X,
+  AlertCircle, // Import Alert Icon for the remark
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { verifyAndProcessPayment } from '../actions';
@@ -171,10 +172,6 @@ function DashboardContent() {
       month: 'short',
       year: 'numeric',
     });
-
-  const isCancellable = (classDateStr: string) =>
-    new Date().getTime() <
-    new Date(classDateStr).getTime() - 2 * 60 * 60 * 1000;
 
   const now = new Date();
 
@@ -888,13 +885,24 @@ const BookingCard = ({ booking, activePackage, onCancel, processing }: any) => {
         </span>
       </div>
 
-      <button
-        onClick={onCancel}
-        disabled={!canCancel || processing}
-        className={`w-full font-bold py-3 rounded-xl text-xs transition-all duration-200 border ${canCancel ? 'bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 border-gray-200 hover:border-red-200 shadow-sm hover:shadow' : 'bg-gray-50 text-gray-300 border-transparent cursor-not-allowed'}`}
-      >
-        {canCancel ? 'จัดการ / ยกเลิกการจอง' : 'ยกเลิกไม่ได้ (ใกล้เวลาเรียน)'}
-      </button>
+      {/* Button & Remark Section */}
+      <div className="space-y-2">
+        <button
+          onClick={onCancel}
+          disabled={!canCancel || processing}
+          className={`w-full font-bold py-3 rounded-xl text-xs transition-all duration-200 border ${canCancel ? 'bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 border-gray-200 hover:border-red-200 shadow-sm hover:shadow' : 'bg-gray-50 text-gray-300 border-transparent cursor-not-allowed'}`}
+        >
+          {canCancel ? 'จัดการ' : 'ยกเลิกไม่ได้ (ใกล้เวลาเรียน)'}
+        </button>
+
+        {/* Added Remark */}
+        {canCancel && (
+          <div className="flex items-center justify-center gap-1.5 text-[10px] text-red-400 font-light">
+            <AlertCircle size={10} />
+            <span>สามารถยกเลิกได้ก่อนเริ่มคลาส 2 ชั่วโมง</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
