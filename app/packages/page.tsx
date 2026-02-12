@@ -11,6 +11,7 @@ import {
   Search,
   CheckCircle2,
   X,
+  PackageOpen,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 
@@ -111,6 +112,15 @@ function PackagesContent() {
     setShowProfileSelector(false);
   };
 
+  const handleSelectPackage = (template: any) => {
+    // TOGGLE LOGIC: Deselect if clicking the same one
+    if (selectedTemplate?.id === template.id) {
+      setSelectedTemplate(null);
+    } else {
+      setSelectedTemplate(template);
+    }
+  };
+
   const navigateToPayment = () => {
     if (!selectedTemplate) return;
     const paymentUrl = `/payment?userId=${userId}&childId=${childId || 'null'}&packageId=${selectedTemplate.id}`;
@@ -138,9 +148,9 @@ function PackagesContent() {
     <div
       className={`min-h-screen bg-gray-50 flex justify-center ${kanit.className}`}
     >
-      <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-screen overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 flex items-center sticky top-0 bg-white/95 backdrop-blur-sm z-20 shadow-sm">
+      <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-[100dvh] overflow-hidden">
+        {/* 1. HEADER (Fixed at Top) */}
+        <div className="px-4 py-3 flex items-center bg-white/95 backdrop-blur-sm z-20 shadow-sm shrink-0 border-b border-gray-50">
           <button
             onClick={() => router.back()}
             className="p-1 -ml-1 text-gray-800 hover:bg-gray-100 rounded-full transition-colors"
@@ -152,8 +162,12 @@ function PackagesContent() {
           </h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-32 scrollbar-hide px-5 pt-4 space-y-6">
-          {/* Profile Card & Switcher */}
+        {/* 2. SCROLLABLE CONTENT AREA
+            Everything (including the Total Price) lives here now. 
+            No floating elements covering content.
+        */}
+        <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pt-4 space-y-6">
+          {/* Profile Card */}
           <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-[#c9b038] rounded-full flex items-center justify-center text-white overflow-hidden">
@@ -250,11 +264,11 @@ function PackagesContent() {
                       </span>
                     </div>
                     <button
-                      onClick={() => setSelectedTemplate(activeTemplate)}
+                      onClick={() => handleSelectPackage(activeTemplate)}
                       className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all ${selectedTemplate?.id === activeTemplate.id ? 'bg-[#1e2e5c] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
                       {selectedTemplate?.id === activeTemplate.id
-                        ? 'เลือกแล้ว'
+                        ? 'เลือกแล้ว (แตะเพื่อยกเลิก)'
                         : 'เลือกแพ็กเกจนี้'}
                     </button>
                   </div>
@@ -267,7 +281,7 @@ function PackagesContent() {
             </div>
           </div>
 
-          {/* Discount */}
+          {/* Discount Section */}
           <div>
             <label className="text-xs text-gray-600 mb-2 block">
               กรอกโค้ดส่วนลด
@@ -283,29 +297,53 @@ function PackagesContent() {
               </button>
             </div>
           </div>
+
+          {/* 3. TOTAL PRICE SECTION (In-Flow)
+             This sits naturally at the end of the list. No overlays. 
+          */}
+          <div className="pt-2">
+            <div className="border-t border-gray-100 pt-6">
+              {selectedTemplate ? (
+                // ACTIVE STATE
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
+                  <div className="flex justify-between items-center px-2">
+                    <span className="text-gray-800 font-bold">รวมราคา:</span>
+                    <span className="text-[#1e2e5c] text-2xl font-bold">
+                      {selectedTemplate.price.toLocaleString()} บาท
+                    </span>
+                  </div>
+                  <button
+                    onClick={navigateToPayment}
+                    className="w-full bg-[#1e2e5c] text-white py-3.5 rounded-xl font-bold text-base shadow-md active:scale-[0.99] transition-transform hover:bg-[#2b4185]"
+                  >
+                    ดำเนินการต่อ
+                  </button>
+                </div>
+              ) : (
+                // PLACEHOLDER STATE (Reserved Space)
+                // This keeps the layout stable even when unselected
+                <div className="h-[100px] flex flex-col items-center justify-center text-gray-300 gap-2 border border-dashed border-gray-100 rounded-xl bg-gray-50/50 select-none">
+                  <PackageOpen size={24} className="opacity-30" />
+                  <span className="text-xs font-light">
+                    กรุณาเลือกแพ็กเกจด้านบน
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. BOTTOM NAV SPACER
+             BottomNav is absolute at the bottom of the screen. 
+             This invisible block ensures the Price Section can scroll up 
+             ABOVE the Bottom Nav, so it's never covered.
+          */}
+          <div className="h-[90px] w-full shrink-0"></div>
         </div>
 
-        {/* Bottom Total Bar (Visible when package selected) */}
-        {selectedTemplate && (
-          <div className="absolute bottom-[70px] w-full bg-white border-t border-gray-100 px-6 py-4 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20 animate-in slide-in-from-bottom duration-300">
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-gray-800 font-bold">รวมราคา:</span>
-              <span className="text-[#1e2e5c] text-2xl font-bold">
-                {selectedTemplate.price.toLocaleString()} บาท
-              </span>
-            </div>
-            <button
-              onClick={navigateToPayment}
-              className="w-full bg-[#1e2e5c] text-white py-3.5 rounded-lg font-bold text-base shadow-lg active:scale-[0.99] transition-transform hover:bg-[#2b4185]"
-            >
-              ถัดไป
-            </button>
-          </div>
-        )}
-
+        {/* 5. BOTTOM NAV (Overlay) */}
         <BottomNav />
 
-        {/* Profile Switcher Modal */}
+        {/* --- MODALS --- */}
         {showProfileSelector && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
