@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Loader2,
   ImageIcon,
+  ShieldAlert, // Added icon for Dev button
 } from 'lucide-react';
 import { verifyAndProcessPayment } from '@/app/actions';
 
@@ -121,6 +122,37 @@ function PaymentContent() {
     }
   };
 
+  // --- DEV BYPASS HANDLER ---
+  const handleDevBypass = async () => {
+    if (!confirm('Use DEV BYPASS to simulate successful payment?')) return;
+
+    setSubmitting(true);
+    setErrorMsg('');
+
+    try {
+      const formData = new FormData();
+      // No file needed for bypass
+      formData.append('userId', userId!);
+      formData.append('packageId', packageId!);
+      formData.append('childId', childId || 'null');
+      formData.append('type', 'new_package');
+      formData.append('dev_bypass', 'true'); // Trigger bypass in actions.ts
+
+      const result = await verifyAndProcessPayment(formData);
+
+      if (result.success) {
+        router.replace(`/dashboard?userId=${userId}&refresh=true`);
+      } else {
+        setErrorMsg(result.message || 'Bypass Failed');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Dev Bypass Error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!file || !pkgTemplate) {
       setErrorMsg('กรุณาแนบสลิปโอนเงิน');
@@ -136,6 +168,7 @@ function PaymentContent() {
       formData.append('userId', userId!);
       formData.append('packageId', packageId!);
       formData.append('childId', childId || 'null');
+      formData.append('type', 'new_package');
       formData.append('price', pkgTemplate.price.toString());
 
       const result = await verifyAndProcessPayment(formData);
@@ -143,7 +176,6 @@ function PaymentContent() {
       if (result.success) {
         router.replace(`/dashboard?userId=${userId}&refresh=true`);
       } else {
-        // FIXED: Changed result.error to result.message
         setErrorMsg(result.message || 'การตรวจสอบสลิปผิดพลาด กรุณาลองใหม่');
       }
     } catch (err) {
@@ -317,7 +349,7 @@ function PaymentContent() {
         </div>
 
         {/* Footer Action */}
-        <div className="shrink-0 bg-white border-t border-gray-100 px-6 py-4 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
+        <div className="shrink-0 bg-white border-t border-gray-100 px-6 py-4 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20 space-y-3">
           <button
             onClick={handleSubmit}
             disabled={submitting || !file}
@@ -336,6 +368,16 @@ function PaymentContent() {
             ) : (
               'ยืนยันการชำระเงิน'
             )}
+          </button>
+
+          {/* --- DEV BYPASS BUTTON (REMOVE IN PROD) --- */}
+          <button
+            onClick={handleDevBypass}
+            disabled={submitting}
+            className="w-full py-2.5 rounded-xl font-bold text-sm border-2 border-red-100 text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-all flex items-center justify-center gap-2"
+          >
+            <ShieldAlert size={16} />
+            [TEST ONLY] Bypass Payment
           </button>
         </div>
       </div>
