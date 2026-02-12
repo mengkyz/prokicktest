@@ -15,7 +15,6 @@ import {
   ImageIcon,
 } from 'lucide-react';
 import { verifyAndProcessPayment } from '@/app/actions';
-// ตรวจสอบว่ามีการ import server action นี้ หรือปรับให้ตรงกับที่คุณมี
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -28,12 +27,12 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-// --- CONSTANTS (กรุณาแก้ไขข้อมูลจริงที่นี่) ---
+// --- CONSTANTS ---
 const BANK_DETAILS = {
   bankName: 'ธนาคารกสิกรไทย (KBank)',
   accountName: 'บจก. โปรคิก อะคาเดมี่',
-  accountNumber: '012-3-45678-9', // ใส่เลขบัญชีจริง
-  qrImage: '/qrcode.jpg', // ใส่ path รูป QR Code ของคุณ (ต้องมีไฟล์นี้ใน folder public)
+  accountNumber: '012-3-45678-9', // Update with real number
+  qrImage: '/qrcode.jpg', // Ensure this file exists in public folder
 };
 
 function PaymentContent() {
@@ -83,25 +82,22 @@ function PaymentContent() {
 
   // --- HANDLERS ---
 
-  // 1. Logic สำหรับดาวน์โหลด QR Code
   const handleDownloadQR = () => {
     const link = document.createElement('a');
     link.href = BANK_DETAILS.qrImage;
-    link.download = 'prokick-payment-qr.jpg'; // ชื่อไฟล์ที่จะถูกดาวน์โหลด
+    link.download = 'prokick-payment-qr.jpg';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // 2. Logic สำหรับคัดลอกเลขบัญชี
   const handleCopyAccount = async () => {
     try {
-      // ลบขีดออกเพื่อให้คัดลอกเฉพาะตัวเลข (Option) หรือจะคัดลอกทั้งขีดก็ได้
       const rawNumber = BANK_DETAILS.accountNumber.replace(/-/g, '');
       await navigator.clipboard.writeText(rawNumber);
 
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000); // Reset icon after 2s
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy', err);
     }
@@ -110,12 +106,10 @@ function PaymentContent() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Validate Image Type
       if (!selectedFile.type.startsWith('image/')) {
         setErrorMsg('กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น');
         return;
       }
-      // Validate Size (e.g. 5MB)
       if (selectedFile.size > 5 * 1024 * 1024) {
         setErrorMsg('ขนาดไฟล์ต้องไม่เกิน 5MB');
         return;
@@ -141,18 +135,16 @@ function PaymentContent() {
       formData.append('slip', file);
       formData.append('userId', userId!);
       formData.append('packageId', packageId!);
-      // ส่ง string 'null' ถ้าไม่มี childId เพื่อให้ Server Action จัดการได้ง่าย
       formData.append('childId', childId || 'null');
       formData.append('price', pkgTemplate.price.toString());
 
-      // เรียก Server Action
       const result = await verifyAndProcessPayment(formData);
 
       if (result.success) {
-        // สำเร็จ -> ไปหน้า Dashboard หรือหน้าขอบคุณ
         router.replace(`/dashboard?userId=${userId}&refresh=true`);
       } else {
-        setErrorMsg(result.error || 'การตรวจสอบสลิปผิดพลาด กรุณาลองใหม่');
+        // FIXED: Changed result.error to result.message
+        setErrorMsg(result.message || 'การตรวจสอบสลิปผิดพลาด กรุณาลองใหม่');
       }
     } catch (err) {
       console.error(err);
@@ -210,13 +202,11 @@ function PaymentContent() {
             <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm text-center">
               {/* QR Code */}
               <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-inner inline-block mb-4">
-                {/* ใช้ img tag ปกติสำหรับ QR Code */}
                 <img
                   src={BANK_DETAILS.qrImage}
                   alt="Payment QR"
                   className="w-48 h-48 object-contain mx-auto"
                   onError={(e) => {
-                    // Fallback ถ้าโหลดรูปไม่ได้
                     (e.target as HTMLImageElement).src =
                       'https://placehold.co/200x200?text=QR+Error';
                   }}
