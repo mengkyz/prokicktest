@@ -8,10 +8,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-// 2. Setup LINE
+// 2. Setup LINE Client (CORRECTED: Removed channelSecret)
 const lineClient = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-  channelSecret: process.env.LINE_CHANNEL_SECRET!,
 });
 
 export async function GET(request: Request) {
@@ -22,9 +21,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // ---------------------------------------------------------
-    // REFACTORED: Call the RPC instead of building the Query
-    // ---------------------------------------------------------
+    // 3. Fetch Notifications from Database Function
     const { data: bookings, error } = await supabase.rpc(
       'get_upcoming_notifications',
     );
@@ -34,11 +31,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: 'No bookings to notify' });
     }
 
-    // 5. Send Messages & Update DB
+    // 4. Send Messages & Update DB
     const results = await Promise.all(
       bookings.map(async (booking: any) => {
         try {
-          // Format time (Logic moved from DB to here for formatting)
           const timeStr = new Date(booking.start_time).toLocaleTimeString(
             'th-TH',
             {
@@ -146,9 +142,7 @@ export async function GET(request: Request) {
             ],
           });
 
-          // ---------------------------------------------------------
-          // REFACTORED: Call the second RPC to mark as done
-          // ---------------------------------------------------------
+          // B. Mark as notified
           await supabase.rpc('mark_notification_sent', {
             p_booking_id: booking.booking_id,
           });
