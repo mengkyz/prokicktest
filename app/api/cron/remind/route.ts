@@ -2,26 +2,29 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import * as line from '@line/bot-sdk';
 
-// 1. Setup Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
-
-// 2. Setup LINE Client (CORRECTED: Removed channelSecret)
-const lineClient = new line.messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-});
-
 export async function GET(request: Request) {
-  // Security Check
+  // --- 1. Security Check ---
+  // Keep this! It prevents random people on the internet from triggering your cron job.
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    // 3. Fetch Notifications from Database Function
+    // --- 2. Initialize Clients (LAZY LOADING) ---
+    // UPDATED: We use the ANON KEY now.
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+
+    const lineClient = new line.messagingApi.MessagingApiClient({
+      channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
+    });
+
+    // --- 3. Fetch Notifications from Database Function ---
+    // Since RLS is disabled OR the function is 'security definer', this works with Anon Key.
     const { data: bookings, error } = await supabase.rpc(
       'get_upcoming_notifications',
     );
@@ -31,7 +34,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: 'No bookings to notify' });
     }
 
-    // 4. Send Messages & Update DB
+    // --- 4. Send Messages & Update DB ---
     const results = await Promise.all(
       bookings.map(async (booking: any) => {
         try {
