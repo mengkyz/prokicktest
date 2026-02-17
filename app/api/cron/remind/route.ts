@@ -2,18 +2,19 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import * as line from '@line/bot-sdk';
 
+// --- CONFIGURATION ---
+// This points to your public folder on the web
+const BASE_URL = 'https://prokicktest.vercel.app';
+
 export async function GET(request: Request) {
   // --- 1. Security Check ---
-  // Keep this! It prevents random people on the internet from triggering your cron job.
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    // --- 2. Initialize Clients (LAZY LOADING) ---
-    // UPDATED: We use the ANON KEY now.
-
+    // --- 2. Initialize Clients ---
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,8 +24,7 @@ export async function GET(request: Request) {
       channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
     });
 
-    // --- 3. Fetch Notifications from Database Function ---
-    // Since RLS is disabled OR the function is 'security definer', this works with Anon Key.
+    // --- 3. Fetch Notifications ---
     const { data: bookings, error } = await supabase.rpc(
       'get_upcoming_notifications',
     );
@@ -70,7 +70,8 @@ export async function GET(request: Request) {
                   },
                   hero: {
                     type: 'image',
-                    url: 'https://images.unsplash.com/photo-1575361204480-aadea25d46f3?auto=format&fit=crop&w=600&q=80',
+                    // 👇 UPDATED: Uses your public image
+                    url: `${BASE_URL}/banner.jpg`,
                     size: 'full',
                     aspectRatio: '20:13',
                     aspectMode: 'cover',
