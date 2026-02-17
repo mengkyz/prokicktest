@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import * as line from '@line/bot-sdk';
 
 // --- CONFIGURATION ---
-// This points to your public folder on the web
 const BASE_URL = 'https://prokicktest.vercel.app';
 
 export async function GET(request: Request) {
@@ -38,11 +37,14 @@ export async function GET(request: Request) {
     const results = await Promise.all(
       bookings.map(async (booking: any) => {
         try {
+          // 👇 PERFECT FIX: Added 'timeZone: Asia/Bangkok'
           const timeStr = new Date(booking.start_time).toLocaleTimeString(
             'th-TH',
             {
               hour: '2-digit',
               minute: '2-digit',
+              timeZone: 'Asia/Bangkok', // <--- This forces GMT+7
+              hour12: false, // Optional: ensures 24-hour format (e.g. 14:30)
             },
           );
 
@@ -70,7 +72,6 @@ export async function GET(request: Request) {
                   },
                   hero: {
                     type: 'image',
-                    // 👇 UPDATED: Uses your public image
                     url: `${BASE_URL}/banner.jpg`,
                     size: 'full',
                     aspectRatio: '20:13',
