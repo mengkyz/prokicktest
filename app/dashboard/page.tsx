@@ -17,6 +17,7 @@ import {
   Cpu,
   X,
   AlertCircle, // Import Alert Icon for the remark
+  Loader2,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { verifyAndProcessPayment } from '../actions';
@@ -350,6 +351,21 @@ function DashboardContent() {
     <div
       className={`min-h-screen bg-gray-50 flex justify-center ${kanit.className} overflow-hidden`}
     >
+      {/* Full-screen payment verification overlay */}
+      {processing && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-3xl px-10 py-10 flex flex-col items-center gap-4 shadow-2xl mx-6">
+            <Loader2 size={48} className="animate-spin text-[#1e2e5c]" />
+            <p className="text-[#1e2e5c] font-bold text-lg text-center">
+              กำลังตรวจสอบการชำระเงิน
+            </p>
+            <p className="text-gray-400 text-sm text-center">
+              กรุณารอสักครู่...
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-screen">
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide">
@@ -744,7 +760,7 @@ function DashboardContent() {
                           modal.type === 'confirm_extra' && !selectedSlip
                         }
                       >
-                        {processing ? '...' : 'ยืนยัน'}
+                        ยืนยัน
                       </button>
                     </div>
                     {modal.type === 'confirm_extra' && (

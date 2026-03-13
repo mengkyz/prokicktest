@@ -197,6 +197,21 @@ function PaymentContent() {
     <div
       className={`min-h-screen bg-gray-50 flex justify-center ${kanit.className}`}
     >
+      {/* Full-screen payment verification overlay */}
+      {submitting && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-3xl px-10 py-10 flex flex-col items-center gap-4 shadow-2xl mx-6">
+            <Loader2 size={48} className="animate-spin text-[#1e2e5c]" />
+            <p className="text-[#1e2e5c] font-bold text-lg text-center">
+              กำลังตรวจสอบการชำระเงิน
+            </p>
+            <p className="text-gray-400 text-sm text-center">
+              กรุณารอสักครู่...
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-md bg-white shadow-2xl relative flex flex-col h-[100dvh] overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 flex items-center bg-white/95 backdrop-blur-sm z-20 shadow-sm shrink-0 border-b border-gray-50">
@@ -360,21 +375,14 @@ function PaymentContent() {
                   : 'bg-[#1e2e5c] text-white hover:bg-[#2b4185] active:scale-[0.99]'
               }`}
           >
-            {submitting ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                กำลังตรวจสอบสลิป...
-              </>
-            ) : (
-              'ยืนยันการชำระเงิน'
-            )}
+            ยืนยันการชำระเงิน
           </button>
 
           {/* --- DEV BYPASS BUTTON (REMOVE IN PROD) --- */}
           <button
             onClick={handleDevBypass}
             disabled={submitting}
-            className="w-full py-2.5 rounded-xl font-bold text-sm border-2 border-red-100 text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-all flex items-center justify-center gap-2"
+            className={`w-full py-2.5 rounded-xl font-bold text-sm border-2 border-red-100 bg-red-50 transition-all flex items-center justify-center gap-2 ${submitting ? 'text-red-200 cursor-not-allowed' : 'text-red-400 hover:bg-red-100 hover:text-red-600'}`}
           >
             <ShieldAlert size={16} />
             [TEST ONLY] Bypass Payment
