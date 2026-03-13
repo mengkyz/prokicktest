@@ -5,6 +5,10 @@ import * as line from '@line/bot-sdk';
 // --- CONFIGURATION ---
 const BASE_URL = 'https://prokicktest.vercel.app';
 
+// Returns "น้อง" for child profiles, "คุณ" for parent/player users
+const getPrefix = (booking: any): string =>
+  booking.child_id ? 'น้อง' : 'คุณ';
+
 export async function GET(request: Request) {
   // --- 1. Security Check ---
   const authHeader = request.headers.get('authorization');
@@ -90,7 +94,7 @@ export async function GET(request: Request) {
                         },
                         {
                           type: 'text',
-                          text: `น้อง ${booking.student_name} ได้เลื่อนสถานะเป็น "จองสำเร็จ"`,
+                          text: `${getPrefix(booking)} ${booking.student_name} ได้เลื่อนสถานะเป็น "จองสำเร็จ"`,
                           size: 'sm',
                           color: '#555555',
                           wrap: true,
@@ -205,7 +209,7 @@ export async function GET(request: Request) {
                       contents: [
                         {
                           type: 'text',
-                          text: `น้อง ${booking.student_name} มีคลาสเรียน!`,
+                          text: `${getPrefix(booking)} ${booking.student_name} มีคลาสเรียน!`,
                           weight: 'bold',
                           size: 'md',
                           wrap: true,
