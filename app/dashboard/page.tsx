@@ -527,38 +527,29 @@ function DashboardContent() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() =>
-                  router.push(
-                    `/book?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`,
-                  )
-                }
-                className="bg-gradient-to-r from-[#1e2e5c] to-[#2b4185] text-white rounded-xl py-4 px-4 flex flex-col items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 group"
-              >
-                <div className="bg-white/20 p-2 rounded-full group-hover:bg-white/30 transition-colors">
-                  <CalendarCheck size={20} />
+            <button
+              onClick={() =>
+                router.push(
+                  `/book?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`,
+                )
+              }
+              className="w-full bg-gradient-to-r from-[#1e2e5c] to-[#2b4185] text-white rounded-2xl py-4 px-6 flex items-center justify-between shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2.5 rounded-xl group-hover:bg-white/30 transition-colors">
+                  <CalendarCheck size={22} />
                 </div>
-                <span className="font-bold text-sm tracking-wide">
-                  จองคลาสเรียน
-                </span>
-              </button>
-              <button
-                onClick={() =>
-                  router.push(
-                    `/packages?userId=${userId}${activeProfileId ? `&childId=${activeProfileId}` : ''}`,
-                  )
-                }
-                className="bg-white text-[#1e2e5c] border-2 border-[#1e2e5c]/10 rounded-xl py-4 px-4 flex flex-col items-center justify-center gap-2 shadow-sm hover:shadow-md hover:border-[#1e2e5c]/30 hover:bg-blue-50/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 group"
-              >
-                <div className="text-[#1e2e5c] p-2 bg-blue-50 rounded-full group-hover:bg-white transition-colors">
-                  <CreditCard size={20} />
+                <div className="text-left">
+                  <p className="font-bold text-base tracking-wide leading-tight">
+                    จองคลาสเรียน
+                  </p>
+                  <p className="text-blue-200 text-xs mt-0.5">
+                    เลือกวันและเวลาที่ต้องการ
+                  </p>
                 </div>
-                <span className="font-bold text-sm tracking-wide">
-                  รายละเอียดแพ็กเกจ
-                </span>
-              </button>
-            </div>
+              </div>
+              <ChevronRight size={20} className="text-white/60 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+            </button>
 
             {/* --- BOOKING SECTIONS (Reordered) --- */}
 
