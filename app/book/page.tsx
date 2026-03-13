@@ -80,6 +80,13 @@ function BookSessionContent() {
   useEffect(() => {
     if (!userId) return;
 
+    // Restore saved profile if no childId in URL
+    const savedChildId = localStorage.getItem('prokick_active_child_id');
+    if (!childId && savedChildId) {
+      router.replace(`/book?userId=${userId}&childId=${savedChildId}`);
+      return;
+    }
+
     const init = async () => {
       setLoading(true);
 
@@ -168,6 +175,8 @@ function BookSessionContent() {
 
   // --- ACTIONS ---
   const handleSwitchProfile = (newId: string | null) => {
+    if (newId) localStorage.setItem('prokick_active_child_id', newId);
+    else localStorage.removeItem('prokick_active_child_id');
     const params = new URLSearchParams(searchParams.toString());
     if (newId) params.set('childId', newId);
     else params.delete('childId');

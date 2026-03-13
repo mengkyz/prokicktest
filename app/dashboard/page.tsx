@@ -94,6 +94,12 @@ function DashboardContent() {
         .eq('parent_id', userId);
       setProfile(user);
       setChildren(kids || []);
+
+      // Restore saved profile selection
+      const savedChildId = localStorage.getItem('prokick_active_child_id');
+      if (savedChildId && kids?.find((k) => k.id === savedChildId)) {
+        setActiveProfileId(savedChildId);
+      }
     };
     init();
   }, [userId, router]);
@@ -209,6 +215,8 @@ function DashboardContent() {
 
   // --- ACTIONS ---
   const handleSwitchProfile = (id: string | null) => {
+    if (id) localStorage.setItem('prokick_active_child_id', id);
+    else localStorage.removeItem('prokick_active_child_id');
     setActiveProfileId(id);
     setShowProfileSelector(false);
   };
