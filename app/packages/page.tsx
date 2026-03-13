@@ -54,6 +54,13 @@ function PackagesContent() {
       return;
     }
 
+    // Restore saved profile if no childId in URL
+    const savedChildId = localStorage.getItem('prokick_active_child_id');
+    if (!childId && savedChildId) {
+      router.replace(`/packages?userId=${userId}&childId=${savedChildId}`);
+      return;
+    }
+
     const init = async () => {
       setLoading(true);
       try {
@@ -126,6 +133,8 @@ function PackagesContent() {
 
   // --- HANDLERS ---
   const handleSwitchProfile = (newChildId: string | null) => {
+    if (newChildId) localStorage.setItem('prokick_active_child_id', newChildId);
+    else localStorage.removeItem('prokick_active_child_id');
     const params = new URLSearchParams(searchParams.toString());
     if (newChildId) params.set('childId', newChildId);
     else params.delete('childId');
