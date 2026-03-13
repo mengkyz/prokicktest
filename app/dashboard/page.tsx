@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Kanit } from 'next/font/google';
@@ -18,6 +18,7 @@ import {
   X,
   AlertCircle, // Import Alert Icon for the remark
   Loader2,
+  UploadCloud,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { verifyAndProcessPayment } from '../actions';
@@ -63,6 +64,7 @@ function DashboardContent() {
   const [showProfileSelector, setShowProfileSelector] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [selectedSlip, setSelectedSlip] = useState<File | null>(null);
+  const slipInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State
   const [modal, setModal] = useState<ModalState>({
@@ -726,12 +728,35 @@ function DashboardContent() {
                           แนบสลิป
                         </p>
                         <input
+                          ref={slipInputRef}
                           type="file"
+                          accept="image/*"
+                          className="hidden"
                           onChange={(e) =>
                             setSelectedSlip(e.target.files?.[0] || null)
                           }
-                          className="text-xs w-full"
                         />
+                        <button
+                          type="button"
+                          onClick={() => slipInputRef.current?.click()}
+                          className={`w-full py-3 px-4 rounded-xl border-2 border-dashed text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                            selectedSlip
+                              ? 'border-[#1e2e5c] bg-blue-50 text-[#1e2e5c]'
+                              : 'border-gray-300 bg-gray-50 text-gray-400 hover:border-[#1e2e5c] hover:text-[#1e2e5c] hover:bg-blue-50'
+                          }`}
+                        >
+                          {selectedSlip ? (
+                            <>
+                              <CheckCircle2 size={16} className="shrink-0 text-green-500" />
+                              <span className="truncate">{selectedSlip.name}</span>
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud size={16} className="shrink-0" />
+                              <span>แตะเพื่อแนบสลิป</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
                   )}
@@ -755,7 +780,13 @@ function DashboardContent() {
                             );
                           else if (modal.action) modal.action();
                         }}
-                        className={`flex-1 py-3 rounded-xl font-bold text-white ${modal.type === 'confirm_cancel' ? 'bg-red-500' : 'bg-[#1e2e5c]'}`}
+                        className={`flex-1 py-3 rounded-xl font-bold text-white transition-all ${
+                          modal.type === 'confirm_cancel'
+                            ? 'bg-red-500'
+                            : modal.type === 'confirm_extra' && !selectedSlip
+                              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-[#1e2e5c]'
+                        }`}
                         disabled={
                           modal.type === 'confirm_extra' && !selectedSlip
                         }
