@@ -649,6 +649,20 @@ function BookSessionContent() {
                   {modal.message}
                 </p>
               )}
+              {modal.type === 'confirm' && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                  <span className="text-amber-500 text-base mt-0.5">⚠</span>
+                  <div>
+                    <p className="text-amber-800 font-semibold text-xs">
+                      นโยบายการยกเลิก
+                    </p>
+                    <p className="text-amber-700 text-xs leading-relaxed mt-0.5">
+                      ยกเลิกการจองอย่างน้อย 2 ชั่วโมงก่อนเวลาเริ่มคลาส
+                      เพื่อไม่ให้ถูกตัดจำนวน session
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3">
                 {modal.type === 'confirm' ? (
                   <>
