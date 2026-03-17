@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js Dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\mengs\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}
