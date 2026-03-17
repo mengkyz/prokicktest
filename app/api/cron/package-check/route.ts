@@ -62,7 +62,7 @@ export async function GET(request: Request) {
             : '⏳ แจ้งเตือนแพ็กเกจ';
           const bodyTitle = isExpired
             ? 'แพ็กเกจหมดอายุแล้ว'
-            : 'ใกล้หมดอายุใน 7 วัน';
+            : 'ใกล้หมดอายุใน 15 วัน';
           const bodyColor = isExpired ? '#ef4444' : '#854d0e';
 
           await lineClient.pushMessage({
