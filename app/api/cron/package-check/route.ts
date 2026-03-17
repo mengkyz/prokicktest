@@ -21,7 +21,16 @@ export async function GET(request: Request) {
       channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
     });
 
-    // --- PACKAGE CHECKS ONLY ---
+    // --- STEP 1: Bulk-expire all stale packages ---
+    // Ensures DB status is always correct regardless of whether a notification was sent
+    const { error: expireError } = await supabase
+      .from('user_packages')
+      .update({ status: 'expired' })
+      .eq('status', 'active')
+      .lt('expiry_date', new Date().toISOString());
+    if (expireError) console.error('Bulk expire error:', expireError.message);
+
+    // --- STEP 2: PACKAGE NOTIFICATIONS ---
     const { data: packages, error } = await supabase.rpc(
       'get_package_notifications',
     );
@@ -150,6 +159,14 @@ export async function GET(request: Request) {
             p_package_id: pkg.package_id,
             p_type: pkg.notification_type,
           });
+
+          // If expired notification, ensure status column is set correctly
+          if (isExpired) {
+            await supabase
+              .from('user_packages')
+              .update({ status: 'expired' })
+              .eq('id', pkg.package_id);
+          }
 
           return {
             id: pkg.package_id,
