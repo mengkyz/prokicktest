@@ -158,11 +158,13 @@ function BookSessionContent() {
     setUserBookings(myBookingMap);
 
     // Active Packages for this Profile
+    const nowStr = new Date().toISOString();
     let pkgQuery = supabase
       .from('user_packages')
       .select('*, package_templates(name)')
       .eq('status', 'active')
-      .gt('remaining_sessions', 0);
+      .gt('remaining_sessions', 0)
+      .gt('expiry_date', nowStr);
     if (currentChildId) pkgQuery = pkgQuery.eq('child_id', currentChildId);
     else pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
 
