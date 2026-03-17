@@ -179,7 +179,7 @@ export async function GET(request: Request) {
               messages: [
                 {
                   type: 'flex',
-                  altText: `🔔 แจ้งเตือน: คลาสเรียนเริ่มใน 2 ชม.`,
+                  altText: `🔔 แจ้งเตือน: คลาสเรียนเริ่มใน 3 ชม.`,
                   contents: {
                     type: 'bubble',
                     header: {
