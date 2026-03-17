@@ -129,17 +129,25 @@ export async function verifyAndProcessPayment(formData: FormData) {
       },
     );
 
+    const httpStatus = response.status;
     const result = await response.json();
+    const slipData = result.data || {};
 
-    // 3. Log via RPC
+    // 3. Log via RPC (always — success AND failure)
     await supabase.rpc('log_payment_attempt', {
       p_user_id: userId,
+      p_child_id: childId === 'null' ? null : childId,
       p_payment_type: type,
       p_target_id: packageId,
       p_expected_amount: expectedPrice,
-      p_success: result.success,
+      p_actual_amount: slipData.amount ?? null,
+      p_success: result.success === true,
+      p_http_status: httpStatus,
       p_api_response: result,
-      p_error_code: result.code || null,
+      p_error_code: result.code ?? null,
+      p_trans_ref: slipData.transRef ?? null,
+      p_sender_name: slipData.sender?.displayName ?? null,
+      p_failure_reason: result.success ? null : (result.message ?? null),
     });
 
     if (!result.success) {
@@ -175,6 +183,22 @@ export async function verifyAndProcessPayment(formData: FormData) {
     return { success: true, message: 'Payment successful!' };
   } catch (error: any) {
     console.error('Payment Error:', error);
+    // Log server/network errors so no attempt goes unrecorded
+    await supabase.rpc('log_payment_attempt', {
+      p_user_id: userId,
+      p_child_id: childId === 'null' ? null : childId,
+      p_payment_type: type,
+      p_target_id: packageId,
+      p_expected_amount: 0,
+      p_actual_amount: null,
+      p_success: false,
+      p_http_status: null,
+      p_api_response: null,
+      p_error_code: null,
+      p_trans_ref: null,
+      p_sender_name: null,
+      p_failure_reason: `Server error: ${error?.message ?? 'Unknown'}`,
+    });
     return { success: false, message: 'Server error processing payment.' };
   }
 }
