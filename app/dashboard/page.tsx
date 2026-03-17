@@ -400,7 +400,7 @@ function DashboardContent() {
                   <h2 className="text-xl font-bold text-gray-900 leading-tight">
                     {activeProfileId
                       ? children.find((c) => c.id === activeProfileId)?.nickname
-                      : profile.full_name}
+                      : (profile.nickname || profile.full_name)}
                   </h2>
                   <p className="text-gray-400 text-sm font-light mt-0.5">
                     {activeProfileId ? 'นักกีฬารุ่นจิ๋ว ⚽' : 'ผู้ปกครอง 👨‍👩‍👧'}
@@ -652,7 +652,7 @@ function DashboardContent() {
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-gray-900">
-                      {profile?.full_name}
+                      {profile?.nickname || profile?.full_name}
                     </p>
                     <p className="text-xs text-gray-500">ผู้ปกครอง</p>
                   </div>

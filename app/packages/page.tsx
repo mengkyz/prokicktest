@@ -426,7 +426,7 @@ function PackagesContent() {
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-gray-900">
-                      {parentProfile?.full_name || 'Parent'}
+                      {parentProfile?.nickname || parentProfile?.full_name || 'Parent'}
                     </p>
                     <p className="text-xs text-gray-500">ผู้ปกครอง</p>
                   </div>
