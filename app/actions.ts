@@ -72,11 +72,14 @@ export async function verifyAndProcessPayment(formData: FormData) {
   const childId = formData.get('childId') as string;
   const packageId = formData.get('packageId') as string;
   const type = formData.get('type') as 'new_package' | 'extra_session';
+  const promoId = formData.get('promoId') as string | null;
   const isDevBypass = formData.get('dev_bypass') === 'true';
 
   // --- DEV BYPASS SECTION (Remove before Production) ---
   if (isDevBypass) {
-    return await processDevPayment(userId, childId, packageId, type);
+    const result = await processDevPayment(userId, childId, packageId, type);
+    if (result.success && promoId) await incrementPromoUsage(promoId);
+    return result;
   }
   // -----------------------------------------------------
 
@@ -101,6 +104,22 @@ export async function verifyAndProcessPayment(formData: FormData) {
       if (!template)
         return { success: false, message: 'Invalid Package Template' };
       expectedPrice = template.price;
+
+      // Apply promo discount to expected amount
+      if (promoId) {
+        const { data: promo } = await supabase
+          .from('promo_codes')
+          .select('discount_type, discount_value')
+          .eq('id', promoId)
+          .single();
+        if (promo) {
+          const discount =
+            promo.discount_type === 'percentage'
+              ? Math.floor(expectedPrice * promo.discount_value / 100)
+              : Math.min(promo.discount_value, expectedPrice);
+          expectedPrice = expectedPrice - discount;
+        }
+      }
     } else {
       const { data: pkg } = await supabase
         .from('user_packages')
@@ -180,6 +199,9 @@ export async function verifyAndProcessPayment(formData: FormData) {
       return { success: false, message: rpcResponse.error.message };
     }
 
+    // Increment promo code usage count on success
+    if (promoId) await incrementPromoUsage(promoId);
+
     return { success: true, message: 'Payment successful!' };
   } catch (error: any) {
     console.error('Payment Error:', error);
@@ -238,6 +260,23 @@ export async function loginOrRegisterLineUser(lineProfile: {
   } catch (err: any) {
     console.error('Server Action Error:', err);
     return { success: false, message: 'System connectivity error.' };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// PROMO CODE HELPERS
+// -----------------------------------------------------------------------------
+async function incrementPromoUsage(promoId: string) {
+  const { data: promo } = await supabase
+    .from('promo_codes')
+    .select('used_count')
+    .eq('id', promoId)
+    .single();
+  if (promo != null) {
+    await supabase
+      .from('promo_codes')
+      .update({ used_count: (promo.used_count ?? 0) + 1 })
+      .eq('id', promoId);
   }
 }
 

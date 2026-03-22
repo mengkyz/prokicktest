@@ -41,10 +41,12 @@ function PaymentContent() {
   const userId = searchParams.get('userId');
   const childId = searchParams.get('childId');
   const packageId = searchParams.get('packageId');
+  const promoId = searchParams.get('promoId');
   const router = useRouter();
 
   // Data State
   const [pkgTemplate, setPkgTemplate] = useState<any>(null);
+  const [promoData, setPromoData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Form State
@@ -72,6 +74,15 @@ function PaymentContent() {
           .single();
 
         if (data) setPkgTemplate(data);
+
+        if (promoId) {
+          const { data: promo } = await supabase
+            .from('promo_codes')
+            .select('*')
+            .eq('id', promoId)
+            .single();
+          if (promo) setPromoData(promo);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -79,7 +90,21 @@ function PaymentContent() {
       }
     };
     fetchData();
-  }, [userId, packageId, router]);
+  }, [userId, packageId, promoId, router]);
+
+  // --- DISCOUNT HELPERS ---
+  const getDiscountAmount = () => {
+    if (!promoData || !pkgTemplate) return 0;
+    if (promoData.discount_type === 'percentage') {
+      return Math.floor(pkgTemplate.price * promoData.discount_value / 100);
+    }
+    return Math.min(promoData.discount_value, pkgTemplate.price);
+  };
+
+  const getFinalPrice = () => {
+    if (!pkgTemplate) return 0;
+    return pkgTemplate.price - getDiscountAmount();
+  };
 
   // --- HANDLERS ---
 
@@ -136,7 +161,8 @@ function PaymentContent() {
       formData.append('packageId', packageId!);
       formData.append('childId', childId || 'null');
       formData.append('type', 'new_package');
-      formData.append('dev_bypass', 'true'); // Trigger bypass in actions.ts
+      formData.append('dev_bypass', 'true');
+      if (promoId) formData.append('promoId', promoId);
 
       const result = await verifyAndProcessPayment(formData);
 
@@ -170,6 +196,7 @@ function PaymentContent() {
       formData.append('childId', childId || 'null');
       formData.append('type', 'new_package');
       formData.append('price', pkgTemplate.price.toString());
+      if (promoId) formData.append('promoId', promoId);
 
       const result = await verifyAndProcessPayment(formData);
 
@@ -233,10 +260,31 @@ function PaymentContent() {
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
             <p className="text-blue-200 text-xs mb-1">รายการสั่งซื้อ</p>
             <h2 className="text-xl font-bold mb-4">{pkgTemplate?.name}</h2>
+            {promoData && (
+              <div className="flex justify-between items-center text-sm mb-2 border-t border-white/10 pt-3">
+                <span className="text-blue-200">ราคาเต็ม</span>
+                <span className="text-white/60 line-through">
+                  {pkgTemplate?.price.toLocaleString()} บาท
+                </span>
+              </div>
+            )}
+            {promoData && (
+              <div className="flex justify-between items-center text-sm mb-2">
+                <span className="text-green-300">
+                  ส่วนลด ({promoData.code}){' '}
+                  {promoData.discount_type === 'percentage'
+                    ? `${promoData.discount_value}%`
+                    : `${promoData.discount_value.toLocaleString()} บาท`}
+                </span>
+                <span className="text-green-300 font-medium">
+                  -{getDiscountAmount().toLocaleString()} บาท
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-end border-t border-white/10 pt-4">
               <span className="text-sm text-blue-200">ยอดชำระทั้งสิ้น</span>
               <span className="text-3xl font-bold">
-                {pkgTemplate?.price.toLocaleString()} บาท
+                {getFinalPrice().toLocaleString()} บาท
               </span>
             </div>
           </div>

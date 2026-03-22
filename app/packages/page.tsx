@@ -13,6 +13,7 @@ import {
   X,
   PackageOpen,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 
@@ -47,6 +48,12 @@ function PackagesContent() {
 
   // Logic State: Check if user already has a package
   const [hasActivePackage, setHasActivePackage] = useState(false);
+
+  // Promo Code State
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [promoError, setPromoError] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -122,6 +129,9 @@ function PackagesContent() {
         // Reset Selection
         setSelectedTemplate(null);
         setCurrentTemplateIdx(0);
+        setAppliedPromo(null);
+        setPromoInput('');
+        setPromoError('');
       } catch (error) {
         console.error(error);
       } finally {
@@ -155,10 +165,60 @@ function PackagesContent() {
     }
   };
 
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    setPromoLoading(true);
+    setPromoError('');
+    setAppliedPromo(null);
+
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('promo_codes')
+      .select('*')
+      .eq('code', code)
+      .eq('is_active', true)
+      .single();
+
+    setPromoLoading(false);
+
+    if (error || !data) {
+      setPromoError('ไม่พบโค้ดส่วนลดนี้');
+      return;
+    }
+    if (data.expiry_date && data.expiry_date < now) {
+      setPromoError('โค้ดส่วนลดหมดอายุแล้ว');
+      return;
+    }
+    if (data.usage_limit != null && data.used_count >= data.usage_limit) {
+      setPromoError('โค้ดส่วนลดถูกใช้ครบจำนวนแล้ว');
+      return;
+    }
+    setAppliedPromo(data);
+  };
+
+  const getDiscountAmount = () => {
+    if (!appliedPromo || !selectedTemplate) return 0;
+    if (appliedPromo.discount_type === 'percentage') {
+      return Math.floor(selectedTemplate.price * appliedPromo.discount_value / 100);
+    }
+    return Math.min(appliedPromo.discount_value, selectedTemplate.price);
+  };
+
+  const getFinalPrice = () => {
+    if (!selectedTemplate) return 0;
+    return selectedTemplate.price - getDiscountAmount();
+  };
+
   const navigateToPayment = () => {
     if (!selectedTemplate) return;
-    const paymentUrl = `/payment?userId=${userId}&childId=${childId || 'null'}&packageId=${selectedTemplate.id}`;
-    router.push(paymentUrl);
+    const params = new URLSearchParams({
+      userId: userId!,
+      childId: childId || 'null',
+      packageId: selectedTemplate.id,
+    });
+    if (appliedPromo) params.set('promoId', appliedPromo.id);
+    router.push(`/payment?${params.toString()}`);
   };
 
   // --- CAROUSEL ---
@@ -352,13 +412,45 @@ function PackagesContent() {
               <input
                 type="text"
                 placeholder="PROKICK2024"
-                disabled={hasActivePackage}
-                className="w-full border border-gray-200 rounded-lg h-12 pl-4 pr-12 text-sm focus:outline-none focus:border-[#1e2e5c]"
+                disabled={hasActivePackage || !!appliedPromo}
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                className={`w-full border rounded-lg h-12 pl-4 pr-12 text-sm focus:outline-none transition-colors ${appliedPromo ? 'border-green-400 bg-green-50 text-green-700 font-medium' : 'border-gray-200 focus:border-[#1e2e5c]'}`}
               />
-              <button className="absolute right-0 top-0 h-12 w-12 bg-[#1e2e5c] rounded-r-lg flex items-center justify-center text-white">
-                <Search size={20} />
-              </button>
+              {appliedPromo ? (
+                <button
+                  onClick={() => { setAppliedPromo(null); setPromoInput(''); setPromoError(''); }}
+                  className="absolute right-0 top-0 h-12 w-12 bg-green-500 rounded-r-lg flex items-center justify-center text-white"
+                >
+                  <X size={18} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleApplyPromo}
+                  disabled={promoLoading || !promoInput.trim()}
+                  className="absolute right-0 top-0 h-12 w-12 bg-[#1e2e5c] rounded-r-lg flex items-center justify-center text-white disabled:opacity-50"
+                >
+                  {promoLoading ? <Loader2 size={18} className="animate-spin" /> : <Search size={20} />}
+                </button>
+              )}
             </div>
+            {appliedPromo && (
+              <div className="mt-2 flex items-center gap-2 text-green-700 text-xs font-medium">
+                <CheckCircle2 size={14} />
+                <span>
+                  ใช้โค้ด <span className="font-bold">{appliedPromo.code}</span> ได้ส่วนลด{' '}
+                  {appliedPromo.discount_type === 'percentage'
+                    ? `${appliedPromo.discount_value}%`
+                    : `${appliedPromo.discount_value.toLocaleString()} บาท`}
+                </span>
+              </div>
+            )}
+            {promoError && (
+              <p className="mt-2 text-red-500 text-xs flex items-center gap-1">
+                <AlertCircle size={13} /> {promoError}
+              </p>
+            )}
           </div>
 
           {/* 3. TOTAL PRICE SECTION (In-Flow) */}
@@ -367,10 +459,26 @@ function PackagesContent() {
               {selectedTemplate ? (
                 // ACTIVE STATE
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
+                  {appliedPromo && (
+                    <div className="flex justify-between items-center px-2 text-sm">
+                      <span className="text-gray-500">ราคาเต็ม</span>
+                      <span className="text-gray-400 line-through">
+                        {selectedTemplate.price.toLocaleString()} บาท
+                      </span>
+                    </div>
+                  )}
+                  {appliedPromo && (
+                    <div className="flex justify-between items-center px-2 text-sm">
+                      <span className="text-green-600">ส่วนลด ({appliedPromo.code})</span>
+                      <span className="text-green-600 font-medium">
+                        -{getDiscountAmount().toLocaleString()} บาท
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center px-2">
                     <span className="text-gray-800 font-bold">รวมราคา:</span>
                     <span className="text-[#1e2e5c] text-2xl font-bold">
-                      {selectedTemplate.price.toLocaleString()} บาท
+                      {getFinalPrice().toLocaleString()} บาท
                     </span>
                   </div>
                   <button
