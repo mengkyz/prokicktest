@@ -201,7 +201,7 @@ function PackagesContent() {
     if (!appliedPromo || !selectedTemplate) return 0;
     const val = appliedPromo.discount ?? 0;
     if (appliedPromo.discount_type === 'percent') {
-      return Math.floor(selectedTemplate.price * val / 100);
+      return Math.round(selectedTemplate.price * val) / 100;
     }
     return Math.min(val, selectedTemplate.price);
   };

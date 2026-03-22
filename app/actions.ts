@@ -116,7 +116,7 @@ export async function verifyAndProcessPayment(formData: FormData) {
           const val = promo.discount ?? 0;
           const discount =
             promo.discount_type === 'percent'
-              ? Math.floor(expectedPrice * val / 100)
+              ? Math.round(expectedPrice * val) / 100
               : Math.min(val, expectedPrice);
           expectedPrice = expectedPrice - discount;
         }
