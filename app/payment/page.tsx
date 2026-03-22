@@ -95,10 +95,11 @@ function PaymentContent() {
   // --- DISCOUNT HELPERS ---
   const getDiscountAmount = () => {
     if (!promoData || !pkgTemplate) return 0;
-    if (promoData.discount_type === 'percentage') {
-      return Math.floor(pkgTemplate.price * promoData.discount_value / 100);
+    const val = promoData.discount_value ?? 0;
+    if (promoData.discount_type === 'percent') {
+      return Math.floor(pkgTemplate.price * val / 100);
     }
-    return Math.min(promoData.discount_value, pkgTemplate.price);
+    return Math.min(val, pkgTemplate.price);
   };
 
   const getFinalPrice = () => {
@@ -272,9 +273,9 @@ function PaymentContent() {
               <div className="flex justify-between items-center text-sm mb-2">
                 <span className="text-green-300">
                   ส่วนลด ({promoData.code}){' '}
-                  {promoData.discount_type === 'percentage'
-                    ? `${promoData.discount_value}%`
-                    : `${promoData.discount_value.toLocaleString()} บาท`}
+                  {promoData.discount_type === 'percent'
+                    ? `${promoData.discount_value ?? 0}%`
+                    : `${(promoData.discount_value ?? 0).toLocaleString()} บาท`}
                 </span>
                 <span className="text-green-300 font-medium">
                   -{getDiscountAmount().toLocaleString()} บาท

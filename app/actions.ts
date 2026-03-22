@@ -113,10 +113,11 @@ export async function verifyAndProcessPayment(formData: FormData) {
           .eq('id', promoId)
           .single();
         if (promo) {
+          const val = promo.discount_value ?? 0;
           const discount =
-            promo.discount_type === 'percentage'
-              ? Math.floor(expectedPrice * promo.discount_value / 100)
-              : Math.min(promo.discount_value, expectedPrice);
+            promo.discount_type === 'percent'
+              ? Math.floor(expectedPrice * val / 100)
+              : Math.min(val, expectedPrice);
           expectedPrice = expectedPrice - discount;
         }
       }
