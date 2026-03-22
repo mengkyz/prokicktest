@@ -97,7 +97,7 @@ function PaymentContent() {
     if (!promoData || !pkgTemplate) return 0;
     const val = promoData.discount ?? 0;
     if (promoData.discount_type === 'percent') {
-      return Math.floor(pkgTemplate.price * val / 100);
+      return Math.round(pkgTemplate.price * val) / 100;
     }
     return Math.min(val, pkgTemplate.price);
   };
