@@ -168,6 +168,7 @@ export async function verifyAndProcessPayment(formData: FormData) {
       p_trans_ref: slipData.transRef ?? null,
       p_sender_name: slipData.sender?.displayName ?? null,
       p_failure_reason: result.success ? null : (result.message ?? null),
+      p_promo_id: promoId || null,
     });
 
     if (!result.success) {
@@ -221,6 +222,7 @@ export async function verifyAndProcessPayment(formData: FormData) {
       p_trans_ref: null,
       p_sender_name: null,
       p_failure_reason: `Server error: ${error?.message ?? 'Unknown'}`,
+      p_promo_id: promoId || null,
     });
     return { success: false, message: 'Server error processing payment.' };
   }
