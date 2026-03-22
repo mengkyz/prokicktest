@@ -109,14 +109,15 @@ export async function verifyAndProcessPayment(formData: FormData) {
       if (promoId) {
         const { data: promo } = await supabase
           .from('promo_codes')
-          .select('discount_type, discount_value')
+          .select('discount_type, discount')
           .eq('id', promoId)
           .single();
         if (promo) {
+          const val = promo.discount ?? 0;
           const discount =
-            promo.discount_type === 'percentage'
-              ? Math.floor(expectedPrice * promo.discount_value / 100)
-              : Math.min(promo.discount_value, expectedPrice);
+            promo.discount_type === 'percent'
+              ? Math.floor(expectedPrice * val / 100)
+              : Math.min(val, expectedPrice);
           expectedPrice = expectedPrice - discount;
         }
       }
