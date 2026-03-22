@@ -199,7 +199,7 @@ function PackagesContent() {
 
   const getDiscountAmount = () => {
     if (!appliedPromo || !selectedTemplate) return 0;
-    const val = appliedPromo.discount_value ?? 0;
+    const val = appliedPromo.discount ?? 0;
     if (appliedPromo.discount_type === 'percent') {
       return Math.floor(selectedTemplate.price * val / 100);
     }
@@ -442,8 +442,8 @@ function PackagesContent() {
                 <span>
                   ใช้โค้ด <span className="font-bold">{appliedPromo.code}</span> ได้ส่วนลด{' '}
                   {appliedPromo.discount_type === 'percent'
-                    ? `${appliedPromo.discount_value ?? 0}%`
-                    : `${(appliedPromo.discount_value ?? 0).toLocaleString()} บาท`}
+                    ? `${appliedPromo.discount ?? 0}%`
+                    : `${(appliedPromo.discount ?? 0).toLocaleString()} บาท`}
                 </span>
               </div>
             )}

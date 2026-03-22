@@ -95,7 +95,7 @@ function PaymentContent() {
   // --- DISCOUNT HELPERS ---
   const getDiscountAmount = () => {
     if (!promoData || !pkgTemplate) return 0;
-    const val = promoData.discount_value ?? 0;
+    const val = promoData.discount ?? 0;
     if (promoData.discount_type === 'percent') {
       return Math.floor(pkgTemplate.price * val / 100);
     }
@@ -274,8 +274,8 @@ function PaymentContent() {
                 <span className="text-green-300">
                   ส่วนลด ({promoData.code}){' '}
                   {promoData.discount_type === 'percent'
-                    ? `${promoData.discount_value ?? 0}%`
-                    : `${(promoData.discount_value ?? 0).toLocaleString()} บาท`}
+                    ? `${promoData.discount ?? 0}%`
+                    : `${(promoData.discount ?? 0).toLocaleString()} บาท`}
                 </span>
                 <span className="text-green-300 font-medium">
                   -{getDiscountAmount().toLocaleString()} บาท
