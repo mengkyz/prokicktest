@@ -199,10 +199,11 @@ function PackagesContent() {
 
   const getDiscountAmount = () => {
     if (!appliedPromo || !selectedTemplate) return 0;
-    if (appliedPromo.discount_type === 'percentage') {
-      return Math.floor(selectedTemplate.price * appliedPromo.discount_value / 100);
+    const val = appliedPromo.discount ?? 0;
+    if (appliedPromo.discount_type === 'percent') {
+      return Math.round(selectedTemplate.price * val) / 100;
     }
-    return Math.min(appliedPromo.discount_value, selectedTemplate.price);
+    return Math.min(val, selectedTemplate.price);
   };
 
   const getFinalPrice = () => {
@@ -440,9 +441,9 @@ function PackagesContent() {
                 <CheckCircle2 size={14} />
                 <span>
                   ใช้โค้ด <span className="font-bold">{appliedPromo.code}</span> ได้ส่วนลด{' '}
-                  {appliedPromo.discount_type === 'percentage'
-                    ? `${appliedPromo.discount_value}%`
-                    : `${appliedPromo.discount_value.toLocaleString()} บาท`}
+                  {appliedPromo.discount_type === 'percent'
+                    ? `${appliedPromo.discount ?? 0}%`
+                    : `${(appliedPromo.discount ?? 0).toLocaleString()} บาท`}
                 </span>
               </div>
             )}
