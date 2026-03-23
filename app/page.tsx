@@ -10,6 +10,19 @@ import { loginOrRegisterLineUser } from './actions';
 // -----------------------------------------------------------------------------
 let liffInitPromise: Promise<void> | null = null;
 
+// Maps the ?redirect= param to a page path
+const ALLOWED_REDIRECTS: Record<string, string> = {
+  book: '/book',
+  packages: '/packages',
+  dashboard: '/dashboard',
+};
+
+function getRedirectPath(): string {
+  const params = new URLSearchParams(window.location.search);
+  const redirect = params.get('redirect') ?? '';
+  return ALLOWED_REDIRECTS[redirect] ?? '/dashboard';
+}
+
 export default function LoginPage() {
   const [status, setStatus] = useState<'loading' | 'error' | 'success'>(
     'loading',
@@ -24,13 +37,11 @@ export default function LoginPage() {
         // If we have a stored UserID from a previous visit, use it immediately.
         // This makes the app feel "Native" and instant.
         const cachedUserId = localStorage.getItem('prokick_user_id');
-        // const cachedLineId = localStorage.getItem('prokick_line_token'); // Optional safety check
 
         if (cachedUserId) {
           console.log('⚡ Fast Pass Login');
-          router.replace(`/dashboard?userId=${cachedUserId}`);
-          // We still continue to initialize LIFF in the background to verify token,
-          // but we don't block the user from seeing the UI.
+          const dest = getRedirectPath();
+          router.replace(`${dest}?userId=${cachedUserId}`);
           return;
         }
 
@@ -74,7 +85,8 @@ export default function LoginPage() {
           localStorage.setItem('prokick_user_id', result.userId);
           localStorage.setItem('prokick_line_token', profile.userId);
 
-          router.replace(`/dashboard?userId=${result.userId}`);
+          const dest = getRedirectPath();
+          router.replace(`${dest}?userId=${result.userId}`);
         } else {
           throw new Error(result.message || 'Login failed.');
         }
