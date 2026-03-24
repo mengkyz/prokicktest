@@ -145,7 +145,7 @@ export async function GET(request: Request) {
                         action: {
                           type: 'uri',
                           label: 'ซื้อแพ็กเกจ',
-                          uri: `${BASE_URL}/packages`,
+                          uri: `${BASE_URL}/?redirect=packages`,
                         },
                       },
                     ],
