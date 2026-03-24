@@ -207,7 +207,7 @@ function BookSessionContent() {
       title: isStandby ? 'ยืนยันการต่อคิว' : 'ยืนยันการจอง',
       details: {
         date: new Date(cls.start_time).toLocaleDateString('th-TH'),
-        time: formatTimeRange(cls.start_time),
+        time: formatTimeRange(cls.start_time, cls.end_time),
         location: (cls.venues as any)?.name || cls.location,
         packageName: selectedPkg?.package_templates.name,
         queuePosition: isStandby ? currentQueue + 1 : undefined,
@@ -244,7 +244,7 @@ function BookSessionContent() {
         title: isStandby ? 'ลงชื่อสำรองสำเร็จ' : 'จองสำเร็จ!',
         details: {
           date: new Date(cls.start_time).toLocaleDateString('th-TH'),
-          time: formatTimeRange(cls.start_time),
+          time: formatTimeRange(cls.start_time, cls.end_time),
           location: (cls.venues as any)?.name || cls.location,
           queuePosition: data.queue_position,
         },
@@ -258,9 +258,9 @@ function BookSessionContent() {
     d1.getDate() === d2.getDate() &&
     d1.getMonth() === d2.getMonth() &&
     d1.getFullYear() === d2.getFullYear();
-  const formatTimeRange = (dateStr: string) => {
-    const start = new Date(dateStr);
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const formatTimeRange = (startStr: string, endStr?: string) => {
+    const start = new Date(startStr);
+    const end = endStr ? new Date(endStr) : new Date(start.getTime() + 60 * 60 * 1000);
     return `${start.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
   };
 
@@ -523,7 +523,7 @@ function BookSessionContent() {
                   return (
                     <ClassScheduleCard
                       key={cls.id}
-                      time={formatTimeRange(cls.start_time)}
+                      time={formatTimeRange(cls.start_time, cls.end_time)}
                       field={(cls.venues as any)?.name || cls.location}
                       coach={(cls.coaches as any)?.name || 'Pro Coach'}
                       current={cls.max_capacity - cls.current_bookings}
