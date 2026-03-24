@@ -92,6 +92,9 @@ export async function verifyAndProcessPayment(formData: FormData) {
     return { success: false, message: 'File is empty.' };
   }
 
+  let fullPrice = 0;
+  let discountAmount = 0;
+
   try {
     // 1. Fetch EXPECTED Price
     let expectedPrice = 0;
@@ -103,7 +106,7 @@ export async function verifyAndProcessPayment(formData: FormData) {
         .single();
       if (!template)
         return { success: false, message: 'Invalid Package Template' };
-      expectedPrice = template.price;
+      fullPrice = template.price;
 
       // Apply promo discount to expected amount
       if (promoId) {
@@ -114,13 +117,13 @@ export async function verifyAndProcessPayment(formData: FormData) {
           .single();
         if (promo) {
           const val = promo.discount ?? 0;
-          const discount =
+          discountAmount =
             promo.discount_type === 'percent'
-              ? Math.round(expectedPrice * val) / 100
-              : Math.min(val, expectedPrice);
-          expectedPrice = expectedPrice - discount;
+              ? Math.round(fullPrice * val) / 100
+              : Math.min(val, fullPrice);
         }
       }
+      expectedPrice = parseFloat((fullPrice - discountAmount).toFixed(2));
     } else {
       const { data: pkg } = await supabase
         .from('user_packages')
@@ -169,6 +172,9 @@ export async function verifyAndProcessPayment(formData: FormData) {
       p_sender_name: slipData.sender?.displayName ?? null,
       p_failure_reason: result.success ? null : (result.message ?? null),
       p_promo_id: promoId || null,
+      p_full_price: fullPrice || null,
+      p_discount_amount: discountAmount > 0 ? discountAmount : null,
+      p_net_price: expectedPrice,
     });
 
     if (!result.success) {
@@ -223,6 +229,9 @@ export async function verifyAndProcessPayment(formData: FormData) {
       p_sender_name: null,
       p_failure_reason: `Server error: ${error?.message ?? 'Unknown'}`,
       p_promo_id: promoId || null,
+      p_full_price: fullPrice || null,
+      p_discount_amount: discountAmount > 0 ? discountAmount : null,
+      p_net_price: fullPrice ? parseFloat((fullPrice - discountAmount).toFixed(2)) : null,
     });
     return { success: false, message: 'Server error processing payment.' };
   }
