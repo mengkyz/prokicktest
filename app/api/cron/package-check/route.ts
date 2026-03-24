@@ -144,8 +144,8 @@ export async function GET(request: Request) {
                         height: 'sm',
                         action: {
                           type: 'uri',
-                          label: 'ต่ออายุแพ็กเกจ',
-                          uri: `${BASE_URL}/packages`,
+                          label: 'ซื้อแพ็กเกจ',
+                          uri: `${BASE_URL}/?redirect=packages`,
                         },
                       },
                     ],
