@@ -125,7 +125,7 @@ function BookSessionContent() {
     // Classes (All future)
     const { data: classData } = await supabase
       .from('classes')
-      .select('*')
+      .select('*, coaches(name), venues(name)')
       .gt('start_time', new Date().toISOString())
       .order('start_time');
     setClasses(classData || []);
@@ -208,7 +208,7 @@ function BookSessionContent() {
       details: {
         date: new Date(cls.start_time).toLocaleDateString('th-TH'),
         time: formatTimeRange(cls.start_time),
-        location: cls.location,
+        location: (cls.venues as any)?.name || cls.location,
         packageName: selectedPkg?.package_templates.name,
         queuePosition: isStandby ? currentQueue + 1 : undefined,
       },
@@ -245,7 +245,7 @@ function BookSessionContent() {
         details: {
           date: new Date(cls.start_time).toLocaleDateString('th-TH'),
           time: formatTimeRange(cls.start_time),
-          location: cls.location,
+          location: (cls.venues as any)?.name || cls.location,
           queuePosition: data.queue_position,
         },
         action: () => window.location.reload(),
@@ -524,8 +524,8 @@ function BookSessionContent() {
                     <ClassScheduleCard
                       key={cls.id}
                       time={formatTimeRange(cls.start_time)}
-                      field={cls.location}
-                      coach={cls.instructor || 'Pro Coach'}
+                      field={(cls.venues as any)?.name || cls.location}
+                      coach={(cls.coaches as any)?.name || 'Pro Coach'}
                       current={cls.max_capacity - cls.current_bookings}
                       max={cls.max_capacity}
                       status={
