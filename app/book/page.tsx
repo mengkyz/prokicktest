@@ -126,6 +126,7 @@ function BookSessionContent() {
     const { data: classData } = await supabase
       .from('classes')
       .select('*, coaches(name), venues(name)')
+      .neq('status', 'cancelled')
       .gt('start_time', new Date().toISOString())
       .order('start_time');
     setClasses(classData || []);
