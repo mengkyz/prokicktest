@@ -92,10 +92,11 @@ export async function verifyAndProcessPayment(formData: FormData) {
     return { success: false, message: 'File is empty.' };
   }
 
+  let fullPrice = 0;
+  let discountAmount = 0;
+
   try {
     // 1. Fetch EXPECTED Price
-    let fullPrice = 0;
-    let discountAmount = 0;
     let expectedPrice = 0;
     if (type === 'new_package') {
       const { data: template } = await supabase
