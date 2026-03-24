@@ -133,8 +133,8 @@ function DashboardContent() {
       .from('bookings')
       .select(
         `
-        *, 
-        classes (*), 
+        *,
+        classes (*, coaches(name), venues(name)),
         child_profiles(nickname),
         user_packages (
             id,
@@ -310,7 +310,7 @@ function DashboardContent() {
           hour: '2-digit',
           minute: '2-digit',
         }),
-        location: booking.classes.location,
+        location: booking.classes.venues?.name || booking.classes.location,
       },
       action: () => processCancelBooking(booking.id),
     });
@@ -843,7 +843,7 @@ function DashboardContent() {
                           {formatBookingDate(b.class_date)}
                         </div>
                         <div className="text-gray-500">
-                          {b.classes.location}
+                          {b.classes.venues?.name || b.classes.location}
                         </div>
                       </div>
                       <span
@@ -923,11 +923,11 @@ const BookingCard = ({ booking, activePackage, onCancel, processing }: any) => {
         <span className="text-gray-700">{getBookingTimeRange(booking)}</span>
 
         <span className="font-medium text-gray-500">สนาม:</span>
-        <span className="text-gray-700">{booking.classes.location}</span>
+        <span className="text-gray-700">{booking.classes.venues?.name || booking.classes.location}</span>
 
         <span className="font-medium text-gray-500">โค้ช:</span>
         <span className="text-gray-700">
-          {booking.classes.instructor || 'Coach'}
+          {booking.classes.coaches?.name || 'Coach'}
         </span>
       </div>
 
