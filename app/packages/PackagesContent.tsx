@@ -255,10 +255,10 @@ export default function PackagesContent({ userId, childId }: Props) {
           {/* Profile Card */}
           <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-[#c9b038] rounded-full flex items-center justify-center text-white overflow-hidden">
-                {currentProfile?.picture_url ? (
+              <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 overflow-hidden">
+                {currentProfile?.avatar_url ? (
                   <img
-                    src={currentProfile.picture_url}
+                    src={currentProfile.avatar_url}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -521,8 +521,12 @@ export default function PackagesContent({ userId, childId }: Props) {
                   onClick={() => handleSwitchProfile(null)}
                   className={`w-full flex items-center gap-4 p-3 rounded-xl border transition-all ${!childId ? 'border-[#1e2e5c] bg-blue-50' : 'border-gray-100 hover:bg-gray-50'}`}
                 >
-                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
-                    <User size={20} />
+                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 overflow-hidden">
+                    {parentProfile?.avatar_url ? (
+                      <img src={parentProfile.avatar_url} className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={20} />
+                    )}
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-gray-900">
