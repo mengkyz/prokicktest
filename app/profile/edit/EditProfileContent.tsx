@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { Kanit } from 'next/font/google';
-import { ChevronLeft, User, Camera, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, User, CheckCircle2 } from 'lucide-react';
 import { updateProfile } from '@/app/actions';
 import BottomNav from '@/components/BottomNav';
 
@@ -146,12 +146,6 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                     <User size={48} />
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full border border-gray-200 flex items-center justify-center text-gray-700 shadow-sm hover:bg-gray-50"
-                >
-                  <Camera size={16} />
-                </button>
               </div>
               <h2 className="text-base font-bold text-gray-800 mt-3">
                 {isChild ? 'ข้อมูลนักกีฬา' : 'ข้อมูลผู้ปกครอง'}

@@ -324,8 +324,8 @@ export default function DashboardContent({ userId }: Props) {
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center text-white overflow-hidden">
-                  {profile.picture_url ? (
-                    <img src={profile.picture_url} className="w-full h-full object-cover" />
+                  {profile.avatar_url ? (
+                    <img src={profile.avatar_url} className="w-full h-full object-cover" />
                   ) : (
                     <User size={32} className="text-gray-400" />
                   )}
