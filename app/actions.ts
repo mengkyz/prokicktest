@@ -252,6 +252,8 @@ export async function loginOrRegisterLineUser(lineProfile: {
 }) {
   console.log('--- LINE LOGIN VIA RPC ---', lineProfile.userId);
 
+  let rpcUserId: string | null = null;
+
   try {
     const { data, error } = await supabase.rpc('register_line_user', {
       p_line_user_id: lineProfile.userId,
@@ -270,13 +272,17 @@ export async function loginOrRegisterLineUser(lineProfile: {
       return { success: false, message: 'No response from registration system.' };
     }
 
+    rpcUserId = result.user_id;
+
     // Set the HTTP-only session cookie
     await setSession(result.user_id);
 
     return { success: true, userId: result.user_id, isNew: result.is_new };
   } catch (err: any) {
-    console.error('Server Action Error:', err);
-    return { success: false, message: 'System connectivity error.' };
+    const detail = err?.message ?? String(err);
+    console.error('Server Action Error:', detail, { rpcUserId });
+    // Surface the real error so misconfiguration (e.g. missing SESSION_SECRET) is visible
+    return { success: false, message: detail || 'System connectivity error.' };
   }
 }
 

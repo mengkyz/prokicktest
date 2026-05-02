@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "mcp__8cab270f-11d8-4157-aa57-0b53430e603a__list_projects",
+      "mcp__8cab270f-11d8-4157-aa57-0b53430e603a__execute_sql",
+      "mcp__8cab270f-11d8-4157-aa57-0b53430e603a__list_tables",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "Bash(gh auth *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx\\)$\")"
     ]
   }
 }
