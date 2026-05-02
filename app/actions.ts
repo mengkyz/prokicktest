@@ -287,27 +287,6 @@ export async function loginOrRegisterLineUser(lineProfile: {
 }
 
 // -----------------------------------------------------------------------------
-// MOCK LOGIN (dev only — guarded by MOCK_LOGIN_ENABLED env var)
-// -----------------------------------------------------------------------------
-export async function createMockSession(userId: string) {
-  if (process.env.MOCK_LOGIN_ENABLED !== 'true') {
-    return { success: false, message: 'Mock login is disabled' };
-  }
-
-  // Verify the user actually exists before granting a session
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('id', userId)
-    .single();
-
-  if (!data) return { success: false, message: 'User not found' };
-
-  await setSession(userId);
-  return { success: true };
-}
-
-// -----------------------------------------------------------------------------
 // ADMIN LOGIN (production-safe, protected by ADMIN_SECRET_CODE env var)
 // -----------------------------------------------------------------------------
 export async function getAdminUserList(secretCode: string) {
