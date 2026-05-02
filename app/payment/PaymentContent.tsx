@@ -40,9 +40,10 @@ interface Props {
   childId: string | null;
   packageId: string;
   promoId: string | null;
+  isAdmin: boolean;
 }
 
-export default function PaymentContent({ userId, childId, packageId, promoId }: Props) {
+export default function PaymentContent({ userId, childId, packageId, promoId, isAdmin }: Props) {
   const router = useRouter();
 
   const [pkgTemplate, setPkgTemplate] = useState<any>(null);
@@ -406,7 +407,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId }: 
             ยืนยันการชำระเงิน
           </button>
 
-          {process.env.NEXT_PUBLIC_ENABLE_DEV_MODE === 'true' && (
+          {isAdmin && (
             <button
               onClick={handleDevBypass}
               disabled={submitting}

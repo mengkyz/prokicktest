@@ -31,10 +31,11 @@ async function verifySignature(value: string, sig: string): Promise<boolean> {
   return diff === 0
 }
 
-export async function setSession(userId: string): Promise<void> {
-  const sig = await sign(userId)
+export async function setSession(userId: string, isAdmin = false): Promise<void> {
+  const payload = isAdmin ? `${userId}~admin` : userId
+  const sig = await sign(payload)
   const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE, `${userId}.${sig}`, {
+  cookieStore.set(SESSION_COOKIE, `${payload}.${sig}`, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -43,7 +44,7 @@ export async function setSession(userId: string): Promise<void> {
   })
 }
 
-export async function getSession(): Promise<{ userId: string } | null> {
+export async function getSession(): Promise<{ userId: string; isAdmin: boolean } | null> {
   const cookieStore = await cookies()
   const cookie = cookieStore.get(SESSION_COOKIE)
   if (!cookie?.value) return null
@@ -51,14 +52,16 @@ export async function getSession(): Promise<{ userId: string } | null> {
   const lastDot = cookie.value.lastIndexOf('.')
   if (lastDot === -1) return null
 
-  const userId = cookie.value.slice(0, lastDot)
+  const payload = cookie.value.slice(0, lastDot)
   const sig = cookie.value.slice(lastDot + 1)
-  if (!userId || !sig) return null
+  if (!payload || !sig) return null
 
-  const valid = await verifySignature(userId, sig)
+  const valid = await verifySignature(payload, sig)
   if (!valid) return null
 
-  return { userId }
+  const isAdmin = payload.endsWith('~admin')
+  const userId = isAdmin ? payload.slice(0, -6) : payload
+  return { userId, isAdmin }
 }
 
 export async function deleteSession(): Promise<void> {

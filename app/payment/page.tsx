@@ -19,6 +19,7 @@ export default async function PaymentPage({
       childId={childId ?? null}
       packageId={packageId}
       promoId={promoId ?? null}
+      isAdmin={session.isAdmin}
     />
   );
 }

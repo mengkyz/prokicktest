@@ -316,7 +316,7 @@ export async function createAdminSession(userId: string, secretCode: string) {
 
   if (!data) return { success: false, message: 'User not found' };
 
-  await setSession(userId);
+  await setSession(userId, true);
   return { success: true };
 }
 
