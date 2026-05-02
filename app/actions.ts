@@ -2,8 +2,8 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
+import { setSession, getSession } from '@/lib/session';
 
-// Standard Client (Anon Key) is sufficient since RLS is disabled
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -17,7 +17,9 @@ const SLIPOK_API_KEY = process.env.SLIPOK_API_KEY!;
 // -----------------------------------------------------------------------------
 
 export async function createChildProfile(formData: FormData) {
-  const parentId = formData.get('parentId') as string;
+  const session = await getSession();
+  if (!session) return { success: false, message: 'Not authenticated' };
+
   const nickname = formData.get('nickname') as string;
   const weight = formData.get('weight') as string;
   const height = formData.get('height') as string;
@@ -25,7 +27,7 @@ export async function createChildProfile(formData: FormData) {
   const birthDate = formData.get('birthDate') as string;
 
   const { error } = await supabase.rpc('create_child_profile', {
-    p_parent_id: parentId,
+    p_parent_id: session.userId, // always use session, never client input
     p_nickname: nickname,
     p_weight: weight || null,
     p_height: height || null,
@@ -38,6 +40,9 @@ export async function createChildProfile(formData: FormData) {
 }
 
 export async function updateProfile(formData: FormData) {
+  const session = await getSession();
+  if (!session) return { success: false, message: 'Not authenticated' };
+
   const id = formData.get('id') as string;
   const isChild = formData.get('isChild') === 'true';
   const nickname = formData.get('nickname') as string;
@@ -68,20 +73,25 @@ export async function updateProfile(formData: FormData) {
 // PAYMENT VERIFICATION LOGIC
 // -----------------------------------------------------------------------------
 export async function verifyAndProcessPayment(formData: FormData) {
-  const userId = formData.get('userId') as string;
+  const session = await getSession();
+  if (!session) return { success: false, message: 'Not authenticated' };
+
+  const userId = session.userId; // Always from session — never trust the client
   const childId = formData.get('childId') as string;
   const packageId = formData.get('packageId') as string;
   const type = formData.get('type') as 'new_package' | 'extra_session';
   const promoId = formData.get('promoId') as string | null;
-  const isDevBypass = formData.get('dev_bypass') === 'true';
 
-  // --- DEV BYPASS SECTION (Remove before Production) ---
+  // Dev bypass: only allowed when MOCK_LOGIN_ENABLED is set server-side
+  const isDevBypass =
+    formData.get('dev_bypass') === 'true' &&
+    process.env.MOCK_LOGIN_ENABLED === 'true';
+
   if (isDevBypass) {
     const result = await processDevPayment(userId, childId, packageId, type);
     if (result.success && promoId) await incrementPromoUsage(promoId);
     return result;
   }
-  // -----------------------------------------------------
 
   const file = formData.get('slip') as File;
 
@@ -96,7 +106,6 @@ export async function verifyAndProcessPayment(formData: FormData) {
   let discountAmount = 0;
 
   try {
-    // 1. Fetch EXPECTED Price
     let expectedPrice = 0;
     if (type === 'new_package') {
       const { data: template } = await supabase
@@ -108,7 +117,6 @@ export async function verifyAndProcessPayment(formData: FormData) {
         return { success: false, message: 'Invalid Package Template' };
       fullPrice = template.price;
 
-      // Apply promo discount to expected amount
       if (promoId) {
         const { data: promo } = await supabase
           .from('promo_codes')
@@ -135,7 +143,6 @@ export async function verifyAndProcessPayment(formData: FormData) {
       expectedPrice = pkg.package_templates.extra_session_price;
     }
 
-    // 2. Call SlipOK API
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const slipFormData = new FormData();
@@ -156,7 +163,6 @@ export async function verifyAndProcessPayment(formData: FormData) {
     const result = await response.json();
     const slipData = result.data || {};
 
-    // 3. Log via RPC (always — success AND failure)
     await supabase.rpc('log_payment_attempt', {
       p_user_id: userId,
       p_child_id: childId === 'null' ? null : childId,
@@ -188,7 +194,6 @@ export async function verifyAndProcessPayment(formData: FormData) {
       };
     }
 
-    // 4. Execute Transaction via RPC
     let rpcResponse;
     if (type === 'new_package') {
       rpcResponse = await supabase.rpc('buy_new_package', {
@@ -207,13 +212,11 @@ export async function verifyAndProcessPayment(formData: FormData) {
       return { success: false, message: rpcResponse.error.message };
     }
 
-    // Increment promo code usage count on success
     if (promoId) await incrementPromoUsage(promoId);
 
     return { success: true, message: 'Payment successful!' };
   } catch (error: any) {
     console.error('Payment Error:', error);
-    // Log server/network errors so no attempt goes unrecorded
     await supabase.rpc('log_payment_attempt', {
       p_user_id: userId,
       p_child_id: childId === 'null' ? null : childId,
@@ -231,14 +234,16 @@ export async function verifyAndProcessPayment(formData: FormData) {
       p_promo_id: promoId || null,
       p_full_price: fullPrice || null,
       p_discount_amount: discountAmount > 0 ? discountAmount : null,
-      p_net_price: fullPrice ? parseFloat((fullPrice - discountAmount).toFixed(2)) : null,
+      p_net_price: fullPrice
+        ? parseFloat((fullPrice - discountAmount).toFixed(2))
+        : null,
     });
     return { success: false, message: 'Server error processing payment.' };
   }
 }
 
 // -----------------------------------------------------------------------------
-// AUTO-REGISTRATION LOGIC
+// LINE AUTO-REGISTRATION + SESSION CREATION
 // -----------------------------------------------------------------------------
 export async function loginOrRegisterLineUser(lineProfile: {
   userId: string;
@@ -262,17 +267,72 @@ export async function loginOrRegisterLineUser(lineProfile: {
     const result = data && data[0] ? data[0] : null;
 
     if (!result) {
-      return {
-        success: false,
-        message: 'No response from registration system.',
-      };
+      return { success: false, message: 'No response from registration system.' };
     }
+
+    // Set the HTTP-only session cookie
+    await setSession(result.user_id);
 
     return { success: true, userId: result.user_id, isNew: result.is_new };
   } catch (err: any) {
     console.error('Server Action Error:', err);
     return { success: false, message: 'System connectivity error.' };
   }
+}
+
+// -----------------------------------------------------------------------------
+// MOCK LOGIN (dev only — guarded by MOCK_LOGIN_ENABLED env var)
+// -----------------------------------------------------------------------------
+export async function createMockSession(userId: string) {
+  if (process.env.MOCK_LOGIN_ENABLED !== 'true') {
+    return { success: false, message: 'Mock login is disabled' };
+  }
+
+  // Verify the user actually exists before granting a session
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (!data) return { success: false, message: 'User not found' };
+
+  await setSession(userId);
+  return { success: true };
+}
+
+// -----------------------------------------------------------------------------
+// ADMIN LOGIN (production-safe, protected by ADMIN_SECRET_CODE env var)
+// -----------------------------------------------------------------------------
+export async function getAdminUserList(secretCode: string) {
+  if (!secretCode || secretCode !== process.env.ADMIN_SECRET_CODE) {
+    return { success: false, message: 'Invalid secret code' };
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*, child_profiles(id)')
+    .order('full_name');
+
+  if (error) return { success: false, message: error.message };
+  return { success: true, users: data || [] };
+}
+
+export async function createAdminSession(userId: string, secretCode: string) {
+  if (!secretCode || secretCode !== process.env.ADMIN_SECRET_CODE) {
+    return { success: false, message: 'Invalid secret code' };
+  }
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (!data) return { success: false, message: 'User not found' };
+
+  await setSession(userId);
+  return { success: true };
 }
 
 // -----------------------------------------------------------------------------
@@ -293,7 +353,7 @@ async function incrementPromoUsage(promoId: string) {
 }
 
 // -----------------------------------------------------------------------------
-// DEV BYPASS FUNCTION (Temporary)
+// DEV BYPASS HELPER (only reachable when MOCK_LOGIN_ENABLED=true)
 // -----------------------------------------------------------------------------
 async function processDevPayment(
   userId: string,
@@ -326,10 +386,7 @@ async function processDevPayment(
       };
     }
 
-    return {
-      success: true,
-      message: 'Dev Purchase Completed (No Slip Checked)',
-    };
+    return { success: true, message: 'Dev Purchase Completed (No Slip Checked)' };
   } catch (error: any) {
     console.error('Dev Bypass Exception:', error);
     return { success: false, message: 'Server Exception during Dev Bypass' };

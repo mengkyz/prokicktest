@@ -5,12 +5,8 @@ import { useRouter } from 'next/navigation';
 import liff from '@line/liff';
 import { loginOrRegisterLineUser } from './actions';
 
-// -----------------------------------------------------------------------------
-// GLOBAL CACHE
-// -----------------------------------------------------------------------------
 let liffInitPromise: Promise<void> | null = null;
 
-// Maps the ?redirect= param to a page path
 const ALLOWED_REDIRECTS: Record<string, string> = {
   book: '/book',
   packages: '/packages',
@@ -33,23 +29,26 @@ export default function LoginPage() {
   useEffect(() => {
     const runAuth = async () => {
       try {
-        // --- LEVEL 1: INSTANT LOGIN (The "Fast Pass") ---
-        // If we have a stored UserID from a previous visit, use it immediately.
-        // This makes the app feel "Native" and instant.
-        const cachedUserId = localStorage.getItem('prokick_user_id');
+        const dest = getRedirectPath();
 
-        if (cachedUserId) {
-          console.log('⚡ Fast Pass Login');
-          const dest = getRedirectPath();
-          router.replace(`${dest}?userId=${cachedUserId}`);
-          return;
+        // --- FAST PASS: check if we already have a valid server session ---
+        // localStorage hint tells us whether to bother checking (avoids an
+        // unnecessary network round-trip on first-ever visit).
+        const hadSession = !!localStorage.getItem('prokick_user_id');
+        if (hadSession) {
+          const resp = await fetch('/api/auth/session');
+          if (resp.ok) {
+            router.replace(dest);
+            return;
+          }
+          // Stale hint — clear it and fall through to full LIFF auth
+          localStorage.removeItem('prokick_user_id');
         }
 
-        // --- LEVEL 2: LIFF INITIALIZATION ---
+        // --- LIFF INITIALIZATION ---
         const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
         if (!liffId) throw new Error('LIFF ID missing.');
 
-        // Prevent "Hanging": Race LIFF init against a 5-second timeout
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('Connection timed out. Please try again.')),
@@ -61,19 +60,17 @@ export default function LoginPage() {
           liffInitPromise = liff.init({ liffId });
         }
 
-        // Wait for LIFF or Timeout
         await Promise.race([liffInitPromise, timeoutPromise]);
 
-        // --- LEVEL 3: AUTHENTICATION ---
+        // --- LINE AUTHENTICATION ---
         if (!liff.isLoggedIn()) {
           liff.login({ redirectUri: window.location.href });
           return;
         }
 
-        // --- LEVEL 4: SERVER SYNC ---
+        // --- SERVER SYNC + SESSION COOKIE ---
         const profile = await liff.getProfile();
 
-        // Only run the server action if we don't have a cached ID (or to refresh it)
         const result = await loginOrRegisterLineUser({
           userId: profile.userId,
           displayName: profile.displayName,
@@ -81,12 +78,11 @@ export default function LoginPage() {
         });
 
         if (result.success && result.userId) {
-          // SAVE TO CACHE for next time
+          // Store as hint only — the real auth is the HTTP-only cookie set by
+          // loginOrRegisterLineUser on the server.
           localStorage.setItem('prokick_user_id', result.userId);
-          localStorage.setItem('prokick_line_token', profile.userId);
 
-          const dest = getRedirectPath();
-          router.replace(`${dest}?userId=${result.userId}`);
+          router.replace(dest); // No userId in URL — session cookie carries identity
         } else {
           throw new Error(result.message || 'Login failed.');
         }
@@ -94,14 +90,12 @@ export default function LoginPage() {
         console.error('Login Error:', err);
         setStatus('error');
         setErrorMsg(err.message || 'Unexpected error.');
-        liffInitPromise = null; // Reset for retry
+        liffInitPromise = null;
       }
     };
 
     runAuth();
   }, [router]);
-
-  // --- RENDER UI ---
 
   if (status === 'error') {
     return (
@@ -124,7 +118,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
       <div className="relative flex flex-col items-center">
-        {/* Custom ProKick Spinner or Logo here */}
         <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-6"></div>
         <h1 className="text-2xl font-black text-blue-900 tracking-tighter">
           ProKick
