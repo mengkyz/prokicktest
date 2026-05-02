@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Kanit } from 'next/font/google';
-import { ChevronLeft, Camera, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, CheckCircle2 } from 'lucide-react';
 import { createChildProfile } from '@/app/actions';
 import BottomNav from '@/components/BottomNav';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -19,8 +21,10 @@ interface Props {
 
 export default function AddProfileContent({ userId }: Props) {
   const router = useRouter();
-  const [processing, setProcessing] = useState(false);
+  const { t } = useLanguage();
+  const ap = t.addProfile;
 
+  const [processing, setProcessing] = useState(false);
   const [birthDate, setBirthDate] = useState('');
   const [calculatedAge, setCalculatedAge] = useState<number | null>(null);
 
@@ -61,13 +65,13 @@ export default function AddProfileContent({ userId }: Props) {
       setModal({
         isOpen: true,
         type: 'success',
-        message: 'เพิ่มโปรไฟล์เรียบร้อยแล้ว',
+        message: ap.addedSuccess,
       });
     } else {
       setModal({
         isOpen: true,
         type: 'error',
-        message: result.message || 'เกิดข้อผิดพลาด',
+        message: result.message || ap.error,
       });
     }
   };
@@ -85,9 +89,10 @@ export default function AddProfileContent({ userId }: Props) {
           >
             <ChevronLeft size={28} />
           </button>
-          <h1 className="flex-1 text-center text-lg font-bold text-gray-900 pr-8">
-            เพิ่มโปรไฟล์เด็ก
+          <h1 className="flex-1 text-center text-lg font-bold text-gray-900">
+            {ap.title}
           </h1>
+          <LanguageToggle />
         </div>
 
         {/* Scrollable Form Content */}
@@ -102,15 +107,9 @@ export default function AddProfileContent({ userId }: Props) {
                 <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center text-4xl overflow-hidden border-4 border-white shadow-sm text-gray-400">
                   🧒
                 </div>
-                <button
-                  type="button"
-                  className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full border border-gray-200 flex items-center justify-center text-gray-700 shadow-sm hover:bg-gray-50"
-                >
-                  <Camera size={16} />
-                </button>
               </div>
               <h2 className="text-base font-bold text-gray-800 mt-3">
-                ข้อมูลนักกีฬา
+                {ap.athleteInfo}
               </h2>
             </div>
 
@@ -118,23 +117,23 @@ export default function AddProfileContent({ userId }: Props) {
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 font-medium ml-1">
-                  ชื่อเล่น
+                  {ap.nicknameLabel}
                 </label>
                 <input
                   type="text"
                   name="nickname"
                   className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm text-gray-900 focus:outline-none focus:border-[#1e2e5c]"
-                  placeholder="เช่น น้องต้นกล้า"
+                  placeholder={ap.nicknamePlaceholder}
                   required
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 font-medium ml-1">
-                  วันเกิด{' '}
+                  {ap.birthDateLabel}{' '}
                   {calculatedAge !== null && (
                     <span className="text-[#1e2e5c] font-bold">
-                      (อายุ {calculatedAge} ปี)
+                      ({ap.ageLabel} {calculatedAge} {ap.yearsOld})
                     </span>
                   )}
                 </label>
@@ -151,7 +150,7 @@ export default function AddProfileContent({ userId }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs text-gray-500 font-medium ml-1">
-                    ส่วนสูง (ซม.)
+                    {ap.heightLabel}
                   </label>
                   <input
                     type="number"
@@ -162,7 +161,7 @@ export default function AddProfileContent({ userId }: Props) {
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs text-gray-500 font-medium ml-1">
-                    น้ำหนัก (กก.)
+                    {ap.weightLabel}
                   </label>
                   <input
                     type="number"
@@ -175,7 +174,7 @@ export default function AddProfileContent({ userId }: Props) {
 
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 font-medium ml-1">
-                  ไซส์เสื้อ
+                  {ap.jerseySizeLabel}
                 </label>
                 <div className="relative">
                   <select
@@ -203,7 +202,7 @@ export default function AddProfileContent({ userId }: Props) {
               disabled={processing}
               className="w-full bg-[#1e2e5c] text-white py-3.5 rounded-xl font-bold text-base shadow-lg active:scale-[0.99] transition-transform disabled:bg-gray-300 pointer-events-auto hover:bg-[#2b4185]"
             >
-              {processing ? 'กำลังบันทึก...' : 'บันทึก'}
+              {processing ? ap.saving : ap.save}
             </button>
           </div>
         </form>
@@ -224,7 +223,7 @@ export default function AddProfileContent({ userId }: Props) {
                 )}
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">
-                {modal.type === 'success' ? 'สำเร็จ!' : 'แจ้งเตือน'}
+                {modal.type === 'success' ? ap.successTitle : ap.alertTitle}
               </h3>
               <p className="text-gray-500 text-sm mb-6">{modal.message}</p>
               <button
@@ -237,7 +236,7 @@ export default function AddProfileContent({ userId }: Props) {
                 }}
                 className="w-full bg-[#1e2e5c] text-white py-3 rounded-xl font-bold hover:bg-[#2b4185]"
               >
-                ตกลง
+                {ap.ok}
               </button>
             </div>
           </div>

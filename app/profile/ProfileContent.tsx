@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { Kanit } from 'next/font/google';
 import { User, Pencil, Plus } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -24,6 +26,9 @@ interface Props {
 
 export default function ProfileContent({ userId }: Props) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const pr = t.profile;
+
   const [parent, setParent] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +54,7 @@ export default function ProfileContent({ userId }: Props) {
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center text-[#1e2e5c]">
-        Loading...
+        {pr.loading}
       </div>
     );
 
@@ -62,19 +67,19 @@ export default function ProfileContent({ userId }: Props) {
         <div className="px-4 py-3 flex items-center sticky top-0 bg-white z-20 border-b border-gray-50">
           <div className="w-8"></div>
           <h1 className="flex-1 text-center text-lg font-bold text-gray-900">
-            จัดการโปรไฟล์
+            {pr.manageProfile}
           </h1>
-          <div className="w-8"></div>
+          <LanguageToggle />
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide px-5 pt-6 space-y-6">
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-1">
-              โปรไฟล์ของคุณ
+              {pr.yourProfile}
             </h2>
             <p className="text-gray-500 text-sm font-light mb-4">
-              ข้อมูลผู้ปกครองและบุตรหลาน
+              {pr.parentAndChildren}
             </p>
 
             <div className="space-y-4">
@@ -137,7 +142,7 @@ export default function ProfileContent({ userId }: Props) {
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Size: {child.jersey_size || '-'}
+                        {pr.sizeLabel} {child.jersey_size || '-'}
                       </p>
                     </div>
                   </div>
@@ -163,7 +168,7 @@ export default function ProfileContent({ userId }: Props) {
             onClick={() => router.push('/profile/add')}
             className="w-full bg-[#1e2e5c] text-white py-3.5 rounded-xl font-bold text-base shadow-lg active:scale-[0.99] transition-transform flex items-center justify-center gap-2 pointer-events-auto hover:bg-[#2b4185]"
           >
-            <Plus size={20} /> เพิ่มโปรไฟล์เด็ก
+            <Plus size={20} /> {pr.addChildProfile}
           </button>
         </div>
 

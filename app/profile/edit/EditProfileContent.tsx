@@ -7,6 +7,8 @@ import { Kanit } from 'next/font/google';
 import { ChevronLeft, User, CheckCircle2 } from 'lucide-react';
 import { updateProfile } from '@/app/actions';
 import BottomNav from '@/components/BottomNav';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -27,6 +29,8 @@ interface Props {
 
 export default function EditProfileContent({ userId, targetId, type }: Props) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const ep = t.editProfile;
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -87,13 +91,13 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
       setModal({
         isOpen: true,
         type: 'success',
-        message: 'บันทึกข้อมูลเรียบร้อยแล้ว',
+        message: ep.savedSuccess,
       });
     } else {
       setModal({
         isOpen: true,
         type: 'error',
-        message: result.message || 'เกิดข้อผิดพลาด',
+        message: result.message || ep.error,
       });
     }
   };
@@ -120,9 +124,10 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
           >
             <ChevronLeft size={28} />
           </button>
-          <h1 className="flex-1 text-center text-lg font-bold text-gray-900 pr-8">
-            แก้ไขข้อมูล
+          <h1 className="flex-1 text-center text-lg font-bold text-gray-900">
+            {ep.title}
           </h1>
+          <LanguageToggle />
         </div>
 
         {/* Scrollable Form Content */}
@@ -148,7 +153,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                 </div>
               </div>
               <h2 className="text-base font-bold text-gray-800 mt-3">
-                {isChild ? 'ข้อมูลนักกีฬา' : 'ข้อมูลผู้ปกครอง'}
+                {isChild ? ep.athleteInfo : ep.parentInfo}
               </h2>
             </div>
 
@@ -159,7 +164,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                 <>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-500 font-medium ml-1">
-                      ชื่อจริง-นามสกุล
+                      {ep.fullNameLabel}
                     </label>
                     <input
                       type="text"
@@ -171,7 +176,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-500 font-medium ml-1">
-                      เบอร์โทรศัพท์
+                      {ep.phoneLabel}
                     </label>
                     <input
                       type="tel"
@@ -187,7 +192,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
               {/* Common Fields */}
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 font-medium ml-1">
-                  ชื่อเล่น
+                  {ep.nicknameLabel}
                 </label>
                 <input
                   type="text"
@@ -200,10 +205,10 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
 
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 font-medium ml-1">
-                  วันเกิด{' '}
+                  {ep.birthDateLabel}{' '}
                   {calculatedAge !== null && (
                     <span className="text-[#1e2e5c] font-bold">
-                      (อายุ {calculatedAge} ปี)
+                      ({ep.ageLabel} {calculatedAge} {ep.yearsOld})
                     </span>
                   )}
                 </label>
@@ -219,7 +224,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs text-gray-500 font-medium ml-1">
-                    ส่วนสูง (ซม.)
+                    {ep.heightLabel}
                   </label>
                   <input
                     type="number"
@@ -230,7 +235,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs text-gray-500 font-medium ml-1">
-                    น้ำหนัก (กก.)
+                    {ep.weightLabel}
                   </label>
                   <input
                     type="number"
@@ -242,7 +247,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 font-medium ml-1">
-                  ไซส์เสื้อ
+                  {ep.jerseySizeLabel}
                 </label>
                 <div className="relative">
                   <select
@@ -271,7 +276,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
               disabled={processing}
               className="w-full bg-[#1e2e5c] text-white py-3.5 rounded-xl font-bold text-base shadow-lg active:scale-[0.99] transition-transform disabled:bg-gray-300 pointer-events-auto hover:bg-[#2b4185]"
             >
-              {processing ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
+              {processing ? ep.saving : ep.saveChanges}
             </button>
           </div>
         </form>
@@ -292,7 +297,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                 )}
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">
-                {modal.type === 'success' ? 'สำเร็จ!' : 'แจ้งเตือน'}
+                {modal.type === 'success' ? ep.successTitle : ep.alertTitle}
               </h3>
               <p className="text-gray-500 text-sm mb-6">{modal.message}</p>
               <button
@@ -305,7 +310,7 @@ export default function EditProfileContent({ userId, targetId, type }: Props) {
                 }}
                 className="w-full bg-[#1e2e5c] text-white py-3 rounded-xl font-bold hover:bg-[#2b4185]"
               >
-                ตกลง
+                {ep.ok}
               </button>
             </div>
           </div>

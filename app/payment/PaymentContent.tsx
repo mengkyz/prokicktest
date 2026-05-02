@@ -7,7 +7,6 @@ import { Kanit } from 'next/font/google';
 import {
   ChevronLeft,
   Copy,
-  Download,
   UploadCloud,
   CheckCircle2,
   AlertCircle,
@@ -16,6 +15,8 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { verifyAndProcessPayment } from '@/app/actions';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -47,6 +48,8 @@ interface Props {
 
 export default function PaymentContent({ userId, childId, packageId, promoId, isAdmin }: Props) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const py = t.payment;
 
   const [pkgTemplate, setPkgTemplate] = useState<any>(null);
   const [promoData, setPromoData] = useState<any>(null);
@@ -103,16 +106,6 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
     return pkgTemplate.price - getDiscountAmount();
   };
 
-  const handleDownloadQR = () => {
-    if (!paymentSettings?.qr_code_base64) return;
-    const link = document.createElement('a');
-    link.href = paymentSettings.qr_code_base64;
-    link.download = 'prokick-payment-qr.jpg';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleCopyAccount = async () => {
     try {
       const rawNumber = (paymentSettings?.account_number ?? '').replace(/-/g, '');
@@ -128,11 +121,11 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       if (!selectedFile.type.startsWith('image/')) {
-        setErrorMsg('กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น');
+        setErrorMsg(py.imageOnly);
         return;
       }
       if (selectedFile.size > 5 * 1024 * 1024) {
-        setErrorMsg('ขนาดไฟล์ต้องไม่เกิน 5MB');
+        setErrorMsg(py.fileTooLarge);
         return;
       }
       setFile(selectedFile);
@@ -172,7 +165,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
 
   const handleSubmit = async () => {
     if (!file || !pkgTemplate) {
-      setErrorMsg('กรุณาแนบสลิปโอนเงิน');
+      setErrorMsg(py.attachSlipError);
       return;
     }
 
@@ -193,11 +186,11 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
       if (result.success) {
         router.replace('/dashboard?refresh=true');
       } else {
-        setErrorMsg(result.message || 'การตรวจสอบสลิปผิดพลาด กรุณาลองใหม่');
+        setErrorMsg(result.message || py.verifyFailed);
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+      setErrorMsg(py.connectionError);
     } finally {
       setSubmitting(false);
     }
@@ -219,10 +212,10 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
           <div className="bg-white rounded-3xl px-10 py-10 flex flex-col items-center gap-4 shadow-2xl mx-6">
             <Loader2 size={48} className="animate-spin text-[#1e2e5c]" />
             <p className="text-[#1e2e5c] font-bold text-lg text-center">
-              กำลังตรวจสอบการชำระเงิน
+              {py.verifyingPayment}
             </p>
             <p className="text-gray-400 text-sm text-center">
-              กรุณารอสักครู่...
+              {py.pleaseWait}
             </p>
           </div>
         </div>
@@ -237,9 +230,10 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
           >
             <ChevronLeft size={28} />
           </button>
-          <h1 className="flex-1 text-center text-lg font-bold text-gray-900 pr-8">
-            ชำระเงิน
+          <h1 className="flex-1 text-center text-lg font-bold text-gray-900">
+            {py.payment}
           </h1>
+          <LanguageToggle />
         </div>
 
         {/* Scrollable Content */}
@@ -247,33 +241,33 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
           {/* Summary Card */}
           <div className="bg-[#1e2e5c] rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-            <p className="text-blue-200 text-xs mb-1">รายการสั่งซื้อ</p>
+            <p className="text-blue-200 text-xs mb-1">{py.orderSummary}</p>
             <h2 className="text-xl font-bold mb-4">{pkgTemplate?.name}</h2>
             {promoData && (
               <div className="flex justify-between items-center text-sm mb-2 border-t border-white/10 pt-3">
-                <span className="text-blue-200">ราคาเต็ม</span>
+                <span className="text-blue-200">{py.fullPrice}</span>
                 <span className="text-white/60 line-through">
-                  {pkgTemplate?.price.toLocaleString()} บาท
+                  {pkgTemplate?.price.toLocaleString()} {py.baht}
                 </span>
               </div>
             )}
             {promoData && (
               <div className="flex justify-between items-center text-sm mb-2">
                 <span className="text-green-300">
-                  ส่วนลด ({promoData.code}){' '}
+                  {py.discount} ({promoData.code}){' '}
                   {promoData.discount_type === 'percent'
                     ? `${promoData.discount ?? 0}%`
-                    : `${(promoData.discount ?? 0).toLocaleString()} บาท`}
+                    : `${(promoData.discount ?? 0).toLocaleString()} ${py.baht}`}
                 </span>
                 <span className="text-green-300 font-medium">
-                  -{getDiscountAmount().toLocaleString()} บาท
+                  -{getDiscountAmount().toLocaleString()} {py.baht}
                 </span>
               </div>
             )}
             <div className="flex justify-between items-end border-t border-white/10 pt-4">
-              <span className="text-sm text-blue-200">ยอดชำระทั้งสิ้น</span>
+              <span className="text-sm text-blue-200">{py.totalAmount}</span>
               <span className="text-3xl font-bold">
-                {getFinalPrice().toLocaleString()} บาท
+                {getFinalPrice().toLocaleString()} {py.baht}
               </span>
             </div>
           </div>
@@ -281,7 +275,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
           {/* Payment Method Section */}
           <div>
             <h3 className="text-gray-900 font-bold mb-3">
-              โอนเงินผ่านบัญชีธนาคาร
+              {py.bankTransfer}
             </h3>
             <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm text-center">
               <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-inner inline-block mb-4">
@@ -299,7 +293,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
               <div className="border-t border-gray-100 my-4"></div>
 
               <div className="text-left space-y-1">
-                <p className="text-xs text-gray-500">ธนาคาร</p>
+                <p className="text-xs text-gray-500">{py.bankLabel}</p>
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
                     K
@@ -309,7 +303,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                   </p>
                 </div>
 
-                <p className="text-xs text-gray-500 mt-3">เลขที่บัญชี</p>
+                <p className="text-xs text-gray-500 mt-3">{py.accountNumberLabel}</p>
                 <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <span className="text-lg font-bold text-[#1e2e5c] tracking-wide">
                     {paymentSettings?.account_number ?? ''}
@@ -326,7 +320,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                   </button>
                 </div>
 
-                <p className="text-xs text-gray-500 mt-3">ชื่อบัญชี</p>
+                <p className="text-xs text-gray-500 mt-3">{py.accountNameLabel}</p>
                 <p className="text-sm font-medium text-gray-800">
                   {paymentSettings?.account_name ?? ''}
                 </p>
@@ -337,7 +331,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
           {/* Upload Slip Section */}
           <div>
             <h3 className="text-gray-900 font-bold mb-3">
-              แนบหลักฐานการโอนเงิน
+              {py.attachSlip}
             </h3>
 
             <div
@@ -361,7 +355,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                   />
                   <div className="mt-3 flex items-center justify-center gap-2 text-[#1e2e5c] text-sm font-medium">
                     <ImageIcon size={16} />
-                    <span>เปลี่ยนรูปภาพ</span>
+                    <span>{py.changeImage}</span>
                   </div>
                 </div>
               ) : (
@@ -370,10 +364,10 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                     <UploadCloud size={24} />
                   </div>
                   <p className="text-sm font-medium text-gray-700">
-                    แตะเพื่ออัปโหลดสลิป
+                    {py.tapToUpload}
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
-                    รองรับไฟล์ภาพ JPG, PNG
+                    {py.supportedFormats}
                   </p>
                 </>
               )}
@@ -400,7 +394,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                   : 'bg-[#1e2e5c] text-white hover:bg-[#2b4185] active:scale-[0.99]'
               }`}
           >
-            ยืนยันการชำระเงิน
+            {py.confirmPayment}
           </button>
 
           {isAdmin && (

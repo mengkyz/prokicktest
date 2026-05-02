@@ -20,7 +20,9 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
+import LanguageToggle from '@/components/LanguageToggle';
 import { verifyAndProcessPayment } from '../actions';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -48,6 +50,8 @@ interface Props {
 
 export default function DashboardContent({ userId }: Props) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const d = t.dashboard;
 
   const [profile, setProfile] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
@@ -69,7 +73,6 @@ export default function DashboardContent({ userId }: Props) {
     title: '',
   });
 
-  // Initial load
   useEffect(() => {
     const init = async () => {
       const { data: user, error } = await supabase
@@ -145,14 +148,14 @@ export default function DashboardContent({ userId }: Props) {
   }, [loadDashboardData]);
 
   const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('th-TH', {
+    new Date(dateStr).toLocaleDateString(t.locale, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
 
   const formatBookingDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('th-TH', {
+    new Date(dateStr).toLocaleDateString(t.locale, {
       weekday: 'long',
       day: 'numeric',
       month: 'short',
@@ -191,7 +194,7 @@ export default function DashboardContent({ userId }: Props) {
     setModal({
       isOpen: true,
       type: 'confirm_extra',
-      title: 'Top-up Extra Session',
+      title: d.topUpExtra,
       details: {
         id: pkg.id,
         packageName: `${pkg.package_templates.name}`,
@@ -203,7 +206,7 @@ export default function DashboardContent({ userId }: Props) {
 
   const handlePaymentProcess = async (type: 'extra_session', id: string | number) => {
     if (!selectedSlip) {
-      alert('Please upload your payment slip first.');
+      alert(d.uploadSlipFirst);
       return;
     }
     setProcessing(true);
@@ -221,7 +224,7 @@ export default function DashboardContent({ userId }: Props) {
     setModal({
       isOpen: true,
       type: result.success ? 'success' : 'error',
-      title: result.success ? 'Payment Verified!' : 'Verification Failed',
+      title: result.success ? d.paymentVerified : d.verificationFailed,
       message: result.message,
     });
     if (result.success) loadDashboardData();
@@ -246,7 +249,7 @@ export default function DashboardContent({ userId }: Props) {
     setModal({
       isOpen: true,
       type: result.success ? 'success' : 'error',
-      title: result.success ? 'Dev Purchase Success' : 'Dev Purchase Failed',
+      title: result.success ? d.devPurchaseSuccess : d.devPurchaseFailed,
       message: result.message,
     });
 
@@ -257,11 +260,11 @@ export default function DashboardContent({ userId }: Props) {
     setModal({
       isOpen: true,
       type: 'confirm_cancel',
-      title: 'ยกเลิกการจอง?',
-      message: 'คุณแน่ใจหรือไม่ที่จะยกเลิกคลาสนี้?',
+      title: d.cancelBookingTitle,
+      message: d.cancelBookingConfirm,
       details: {
         date: formatBookingDate(booking.class_date),
-        time: new Date(booking.class_date).toLocaleTimeString('th-TH', {
+        time: new Date(booking.class_date).toLocaleTimeString(t.locale, {
           hour: '2-digit',
           minute: '2-digit',
         }),
@@ -280,7 +283,7 @@ export default function DashboardContent({ userId }: Props) {
     });
     setProcessing(false);
     if (data?.success) {
-      setModal({ isOpen: true, type: 'success', title: 'ยกเลิกสำเร็จ', message: 'คืนสิทธิ์การจองเรียบร้อยแล้ว' });
+      setModal({ isOpen: true, type: 'success', title: d.cancelSuccess, message: d.cancelSuccessMsg });
       loadDashboardData();
     } else {
       setModal({ isOpen: true, type: 'error', title: 'Cancellation Failed', message: error?.message || data?.message });
@@ -290,7 +293,7 @@ export default function DashboardContent({ userId }: Props) {
   if (!profile)
     return (
       <div className="min-h-screen flex items-center justify-center text-[#1e2e5c] font-bold">
-        Loading...
+        {d.loading}
       </div>
     );
 
@@ -300,8 +303,8 @@ export default function DashboardContent({ userId }: Props) {
         <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white rounded-3xl px-10 py-10 flex flex-col items-center gap-4 shadow-2xl mx-6">
             <Loader2 size={48} className="animate-spin text-[#1e2e5c]" />
-            <p className="text-[#1e2e5c] font-bold text-lg text-center">กำลังตรวจสอบการชำระเงิน</p>
-            <p className="text-gray-400 text-sm text-center">กรุณารอสักครู่...</p>
+            <p className="text-[#1e2e5c] font-bold text-lg text-center">{d.verifyingPayment}</p>
+            <p className="text-gray-400 text-sm text-center">{d.pleaseWait}</p>
           </div>
         </div>
       )}
@@ -313,10 +316,13 @@ export default function DashboardContent({ userId }: Props) {
             <div className="w-10 h-10 bg-gradient-to-tr from-[#1e2e5c] to-[#3b4d80] rounded-xl flex items-center justify-center rotate-3 shadow-lg">
               <div className="w-5 h-5 border-2 border-white/90 -rotate-3"></div>
             </div>
-            <button className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors relative">
-              <Bell className="text-gray-600" size={20} />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-            </button>
+            <div className="flex items-center gap-2">
+              <LanguageToggle />
+              <button className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors relative">
+                <Bell className="text-gray-600" size={20} />
+                <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+              </button>
+            </div>
           </div>
 
           <div className="px-5 space-y-6 mt-2">
@@ -337,7 +343,7 @@ export default function DashboardContent({ userId }: Props) {
                       : (profile.nickname || profile.full_name)}
                   </h2>
                   <p className="text-gray-400 text-sm font-light mt-0.5">
-                    {activeProfileId ? 'นักกีฬารุ่นจิ๋ว ⚽' : 'ผู้ปกครอง 👨‍👩‍👧'}
+                    {activeProfileId ? d.youngAthlete : d.parent}
                   </p>
                 </div>
               </div>
@@ -345,7 +351,7 @@ export default function DashboardContent({ userId }: Props) {
                 onClick={() => setShowProfileSelector(true)}
                 className="text-xs text-gray-600 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors"
               >
-                สลับโปรไฟล์
+                {d.switchProfile}
               </button>
             </div>
 
@@ -377,7 +383,7 @@ export default function DashboardContent({ userId }: Props) {
                     </div>
                     <div className="mt-4 flex items-end justify-between">
                       <div>
-                        <p className="text-gray-500 text-xs font-medium uppercase tracking-wider mb-1">Sessions Left</p>
+                        <p className="text-gray-500 text-xs font-medium uppercase tracking-wider mb-1">{d.sessionsLeft}</p>
                         <p className="text-[#1e2e5c] font-black text-4xl leading-none">
                           {activePackage.remaining_sessions}{' '}
                           <span className="text-lg text-gray-400 font-normal ml-1">/ {activePackage.package_templates.session_count}</span>
@@ -395,8 +401,8 @@ export default function DashboardContent({ userId }: Props) {
                       </div>
                     </div>
                     <div className="pt-4 mt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400">
-                      <span className="flex items-center gap-1"><CalendarDays size={12} /> Start: {formatDate(activePackage.created_at)}</span>
-                      <span className="flex items-center gap-1 font-medium text-gray-500">Exp: {formatDate(activePackage.expiry_date)}</span>
+                      <span className="flex items-center gap-1"><CalendarDays size={12} /> {d.start} {formatDate(activePackage.created_at)}</span>
+                      <span className="flex items-center gap-1 font-medium text-gray-500">{d.exp} {formatDate(activePackage.expiry_date)}</span>
                     </div>
                   </div>
                 </div>
@@ -406,12 +412,12 @@ export default function DashboardContent({ userId }: Props) {
                 <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-500">
                   <CreditCard size={24} />
                 </div>
-                <p className="text-gray-500 text-sm font-medium mb-4">ยังไม่มีแพ็กเกจที่ใช้งานอยู่</p>
+                <p className="text-gray-500 text-sm font-medium mb-4">{d.noActivePackage}</p>
                 <button
                   onClick={() => router.push(`/packages${activeProfileId ? `?childId=${activeProfileId}` : ''}`)}
                   className="text-white bg-[#1e2e5c] px-6 py-2 rounded-lg text-sm font-bold shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all"
                 >
-                  ซื้อแพ็กเกจเลย
+                  {d.buyPackage}
                 </button>
               </div>
             )}
@@ -426,8 +432,8 @@ export default function DashboardContent({ userId }: Props) {
                   <CalendarCheck size={22} />
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-base tracking-wide leading-tight">จองคลาสเรียน</p>
-                  <p className="text-blue-200 text-xs mt-0.5">เลือกวันและเวลาที่ต้องการ</p>
+                  <p className="font-bold text-base tracking-wide leading-tight">{d.bookClass}</p>
+                  <p className="text-blue-200 text-xs mt-0.5">{d.selectDateAndTime}</p>
                 </div>
               </div>
               <ChevronRight size={20} className="text-white/60 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
@@ -437,25 +443,25 @@ export default function DashboardContent({ userId }: Props) {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  การจองที่กำลังมาถึง
+                  {d.upcomingBookings}
                   {confirmedBookings.length > 0 && (
                     <span className="bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">{confirmedBookings.length}</span>
                   )}
                 </h3>
                 {pastBookings.length > 0 && (
                   <button onClick={() => setShowHistoryModal(true)} className="text-xs font-semibold text-gray-400 hover:text-[#1e2e5c] flex items-center gap-1 transition-colors">
-                    ดูประวัติ <ChevronRight size={14} />
+                    {d.viewHistory} <ChevronRight size={14} />
                   </button>
                 )}
               </div>
               <div className="space-y-4">
                 {confirmedBookings.length === 0 ? (
                   <div className="text-center py-10 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-                    <p className="text-gray-400 text-sm">ไม่มีรายการจองเร็วๆ นี้</p>
+                    <p className="text-gray-400 text-sm">{d.noUpcomingBookings}</p>
                   </div>
                 ) : (
                   confirmedBookings.map((b) => (
-                    <BookingCard key={b.id} booking={b} activePackage={b.user_packages} onCancel={() => initiateCancelBooking(b)} processing={processing} />
+                    <BookingCard key={b.id} booking={b} activePackage={b.user_packages} onCancel={() => initiateCancelBooking(b)} processing={processing} locale={t.locale} d={d} />
                   ))
                 )}
               </div>
@@ -465,12 +471,12 @@ export default function DashboardContent({ userId }: Props) {
             {waitlistBookings.length > 0 && (
               <div>
                 <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  แจ้งเตือนสถานะการรอคิว
+                  {d.waitlistNotification}
                   <span className="bg-yellow-500 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">{waitlistBookings.length}</span>
                 </h3>
                 <div className="space-y-4">
                   {waitlistBookings.map((b) => (
-                    <BookingCard key={b.id} booking={b} activePackage={b.user_packages} onCancel={() => initiateCancelBooking(b)} processing={processing} />
+                    <BookingCard key={b.id} booking={b} activePackage={b.user_packages} onCancel={() => initiateCancelBooking(b)} processing={processing} locale={t.locale} d={d} />
                   ))}
                 </div>
               </div>
@@ -485,7 +491,7 @@ export default function DashboardContent({ userId }: Props) {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-gray-900">เลือกโปรไฟล์</h3>
+                <h3 className="text-lg font-bold text-gray-900">{d.selectProfile}</h3>
                 <button onClick={() => setShowProfileSelector(false)} className="p-1 bg-gray-100 rounded-full"><X size={18} /></button>
               </div>
               <div className="space-y-3">
@@ -493,7 +499,7 @@ export default function DashboardContent({ userId }: Props) {
                   <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500"><User size={20} /></div>
                   <div className="text-left">
                     <p className="font-bold text-gray-900">{profile?.nickname || profile?.full_name}</p>
-                    <p className="text-xs text-gray-500">ผู้ปกครอง</p>
+                    <p className="text-xs text-gray-500">{d.parent.replace(' 👨‍👩‍👧', '')}</p>
                   </div>
                   {!activeProfileId && <CheckCircle2 className="ml-auto text-[#1e2e5c]" size={20} />}
                 </button>
@@ -502,7 +508,7 @@ export default function DashboardContent({ userId }: Props) {
                     <div className="w-10 h-10 bg-[#c9b038] rounded-full flex items-center justify-center text-white font-bold">{child.nickname?.[0]}</div>
                     <div className="text-left">
                       <p className="font-bold text-gray-900">{child.nickname}</p>
-                      <p className="text-xs text-gray-500">นักเรียน</p>
+                      <p className="text-xs text-gray-500">{d.student}</p>
                     </div>
                     {activeProfileId === child.id && <CheckCircle2 className="ml-auto text-[#1e2e5c]" size={20} />}
                   </button>
@@ -521,13 +527,13 @@ export default function DashboardContent({ userId }: Props) {
                 <>
                   {modal.type === 'confirm_extra' && (
                     <div className="space-y-2 mb-4 text-sm">
-                      <div className="flex justify-between"><span>สินค้า</span><span className="font-bold">{modal.details?.packageName}</span></div>
-                      <div className="flex justify-between"><span>ราคา</span><span className="font-bold text-[#1e2e5c]">฿{modal.details?.price?.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>{d.product}</span><span className="font-bold">{modal.details?.packageName}</span></div>
+                      <div className="flex justify-between"><span>{d.price}</span><span className="font-bold text-[#1e2e5c]">฿{modal.details?.price?.toLocaleString()}</span></div>
                       <div className="mt-4">
-                        <p className="text-xs font-bold text-gray-500 mb-2">แนบสลิป</p>
+                        <p className="text-xs font-bold text-gray-500 mb-2">{d.attachSlip}</p>
                         <input ref={slipInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setSelectedSlip(e.target.files?.[0] || null)} />
                         <button type="button" onClick={() => slipInputRef.current?.click()} className={`w-full py-3 px-4 rounded-xl border-2 border-dashed text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${selectedSlip ? 'border-[#1e2e5c] bg-blue-50 text-[#1e2e5c]' : 'border-gray-300 bg-gray-50 text-gray-400 hover:border-[#1e2e5c] hover:text-[#1e2e5c] hover:bg-blue-50'}`}>
-                          {selectedSlip ? <><CheckCircle2 size={16} className="shrink-0 text-green-500" /><span className="truncate">{selectedSlip.name}</span></> : <><UploadCloud size={16} className="shrink-0" /><span>แตะเพื่อแนบสลิป</span></>}
+                          {selectedSlip ? <><CheckCircle2 size={16} className="shrink-0 text-green-500" /><span className="truncate">{selectedSlip.name}</span></> : <><UploadCloud size={16} className="shrink-0" /><span>{d.tapToAttachSlip}</span></>}
                         </button>
                       </div>
                     </div>
@@ -535,12 +541,12 @@ export default function DashboardContent({ userId }: Props) {
                   {modal.type === 'confirm_cancel' && <p className="text-gray-600 mb-6">{modal.message}</p>}
                   <div className="space-y-2">
                     <div className="flex gap-2">
-                      <button onClick={() => setModal({ ...modal, isOpen: false })} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">ยกเลิก</button>
+                      <button onClick={() => setModal({ ...modal, isOpen: false })} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">{d.cancel}</button>
                       <button
                         onClick={() => { if (modal.type === 'confirm_extra') handlePaymentProcess('extra_session', modal.details.id); else if (modal.action) modal.action(); }}
                         className={`flex-1 py-3 rounded-xl font-bold text-white transition-all ${modal.type === 'confirm_cancel' ? 'bg-red-500' : modal.type === 'confirm_extra' && !selectedSlip ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#1e2e5c]'}`}
                         disabled={modal.type === 'confirm_extra' && !selectedSlip}
-                      >ยืนยัน</button>
+                      >{d.confirm}</button>
                     </div>
                     {modal.type === 'confirm_extra' && process.env.NEXT_PUBLIC_ENABLE_DEV_MODE === 'true' && (
                       <button onClick={handleDevBypass} disabled={processing} className="w-full py-2 rounded-xl bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center gap-2">
@@ -552,7 +558,7 @@ export default function DashboardContent({ userId }: Props) {
               ) : (
                 <div className="text-center">
                   <p className="mb-6 text-gray-600">{modal.message}</p>
-                  <button onClick={() => { setModal({ ...modal, isOpen: false }); if (modal.type === 'success') window.location.reload(); }} className="w-full py-3 bg-[#1e2e5c] text-white rounded-xl font-bold">ตกลง</button>
+                  <button onClick={() => { setModal({ ...modal, isOpen: false }); if (modal.type === 'success') window.location.reload(); }} className="w-full py-3 bg-[#1e2e5c] text-white rounded-xl font-bold">{d.ok}</button>
                 </div>
               )}
             </div>
@@ -564,12 +570,12 @@ export default function DashboardContent({ userId }: Props) {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl p-6 max-w-sm w-full max-h-[70vh] flex flex-col shadow-2xl">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-xl text-gray-900">ประวัติการจอง</h3>
+                <h3 className="font-bold text-xl text-gray-900">{d.bookingHistory}</h3>
                 <button onClick={() => setShowHistoryModal(false)}><X className="text-gray-500" size={18} /></button>
               </div>
               <div className="overflow-y-auto space-y-3 flex-1 pr-1">
                 {pastBookings.length === 0 ? (
-                  <p className="text-gray-400 text-center">ไม่มีประวัติ</p>
+                  <p className="text-gray-400 text-center">{d.noHistory}</p>
                 ) : (
                   pastBookings.map((b) => (
                     <div key={b.id} className="text-xs border border-gray-100 p-4 rounded-xl flex justify-between items-center">
@@ -590,18 +596,18 @@ export default function DashboardContent({ userId }: Props) {
   );
 }
 
-const BookingCard = ({ booking, activePackage, onCancel, processing }: any) => {
+const BookingCard = ({ booking, activePackage, onCancel, processing, locale, d }: any) => {
   const isStandby = booking.status === 'standby';
   const canCancel = new Date().getTime() < new Date(booking.class_date).getTime() - 2 * 60 * 60 * 1000;
 
   const formatBookingDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+    new Date(dateStr).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
   const getBookingTimeRange = (booking: any) => {
     const start = new Date(booking.classes.start_time);
     const end = new Date(booking.classes.end_time);
-    const fmt = (d: Date) => d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    return `${fmt(start)} - ${fmt(end)} น.`;
+    const fmt = (dt: Date) => dt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    return `${fmt(start)} - ${fmt(end)}`;
   };
 
   return (
@@ -622,22 +628,22 @@ const BookingCard = ({ booking, activePackage, onCancel, processing }: any) => {
         )}
       </div>
       <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm text-gray-600 mb-4 pl-2">
-        <span className="font-medium text-gray-500">วัน:</span>
+        <span className="font-medium text-gray-500">{d.dayLabel}</span>
         <span className="text-gray-700 font-medium">{formatBookingDate(booking.class_date)}</span>
-        <span className="font-medium text-gray-500">เวลา:</span>
+        <span className="font-medium text-gray-500">{d.timeLabel}</span>
         <span className="text-gray-700">{getBookingTimeRange(booking)}</span>
-        <span className="font-medium text-gray-500">สนาม:</span>
+        <span className="font-medium text-gray-500">{d.fieldLabel}</span>
         <span className="text-gray-700">{booking.classes.venues?.name || booking.classes.location}</span>
-        <span className="font-medium text-gray-500">โค้ช:</span>
+        <span className="font-medium text-gray-500">{d.coachLabel}</span>
         <span className="text-gray-700">{booking.classes.coaches?.name || 'Coach'}</span>
       </div>
       <div className="space-y-2">
         <button onClick={onCancel} disabled={!canCancel || processing} className={`w-full font-bold py-3 rounded-xl text-xs transition-all duration-200 border ${canCancel ? 'bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 border-gray-200 hover:border-red-200 shadow-sm hover:shadow' : 'bg-gray-50 text-gray-300 border-transparent cursor-not-allowed'}`}>
-          {canCancel ? 'จัดการ' : 'ยกเลิกไม่ได้ (ใกล้เวลาเรียน)'}
+          {canCancel ? d.manage : d.cannotCancel}
         </button>
         {canCancel && (
           <div className="flex items-center justify-center gap-1.5 text-[10px] text-red-400 font-light">
-            <AlertCircle size={10} /><span>สามารถยกเลิกได้ก่อนเริ่มคลาส 2 ชั่วโมง</span>
+            <AlertCircle size={10} /><span>{d.cancelWarning}</span>
           </div>
         )}
       </div>

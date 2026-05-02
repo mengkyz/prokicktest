@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { Home, CalendarCheck, CreditCard, Users } from 'lucide-react';
 import { Kanit } from 'next/font/google';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -17,12 +18,13 @@ interface Props {
 export default function BottomNav({ userId }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useLanguage();
 
   const navItems = [
-    { label: 'Home', icon: <Home size={22} />, path: '/dashboard' },
-    { label: 'Bookings', icon: <CalendarCheck size={22} />, path: '/book' },
-    { label: 'Packages', icon: <CreditCard size={22} />, path: '/packages' },
-    { label: 'Profile', icon: <Users size={22} />, path: '/profile' },
+    { label: t.nav.home, icon: <Home size={22} />, path: '/dashboard' },
+    { label: t.nav.bookings, icon: <CalendarCheck size={22} />, path: '/book' },
+    { label: t.nav.packages, icon: <CreditCard size={22} />, path: '/packages' },
+    { label: t.nav.profile, icon: <Users size={22} />, path: '/profile' },
   ];
 
   return (

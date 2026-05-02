@@ -16,6 +16,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const kanit = Kanit({
   subsets: ['thai', 'latin'],
@@ -35,30 +37,27 @@ interface Props {
 
 export default function PackagesContent({ userId, childId }: Props) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const p = t.packages;
 
-  // Data State
   const [parentProfile, setParentProfile] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
   const [currentProfile, setCurrentProfile] = useState<any>(null);
   const [templates, setTemplates] = useState<any[]>([]);
 
-  // UI State
   const [loading, setLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
   const [currentTemplateIdx, setCurrentTemplateIdx] = useState(0);
   const [showProfileSelector, setShowProfileSelector] = useState(false);
 
-  // Logic State: Check if user already has a package
   const [hasActivePackage, setHasActivePackage] = useState(false);
 
-  // Promo Code State
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<any>(null);
   const [promoError, setPromoError] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
 
   useEffect(() => {
-    // Restore saved profile if no childId in URL
     const savedChildId = localStorage.getItem('prokick_active_child_id');
     if (!childId && savedChildId) {
       router.replace(`/packages?childId=${savedChildId}`);
@@ -68,7 +67,6 @@ export default function PackagesContent({ userId, childId }: Props) {
     const init = async () => {
       setLoading(true);
       try {
-        // A. Fetch Parent
         const { data: parent } = await supabase
           .from('profiles')
           .select('*')
@@ -77,14 +75,12 @@ export default function PackagesContent({ userId, childId }: Props) {
         if (!parent) throw new Error('User not found');
         setParentProfile(parent);
 
-        // B. Fetch Children
         const { data: kids } = await supabase
           .from('child_profiles')
           .select('*')
           .eq('parent_id', userId);
         setChildren(kids || []);
 
-        // C. Determine Current Profile
         let activeProfile = parent;
         let type = 'adult';
 
@@ -97,7 +93,6 @@ export default function PackagesContent({ userId, childId }: Props) {
         }
         setCurrentProfile(activeProfile);
 
-        // D. Fetch Packages (Filtered by type)
         const { data: temps } = await supabase
           .from('package_templates')
           .select('*')
@@ -105,7 +100,6 @@ export default function PackagesContent({ userId, childId }: Props) {
           .order('price');
         setTemplates(temps || []);
 
-        // E. Check for EXISTING Active Package (Un-expired)
         const nowStr = new Date().toISOString();
         let pkgQuery = supabase
           .from('user_packages')
@@ -123,7 +117,6 @@ export default function PackagesContent({ userId, childId }: Props) {
         const hasActive = existingPkgs && existingPkgs.length > 0;
         setHasActivePackage(!!hasActive);
 
-        // Reset Selection
         setSelectedTemplate(null);
         setCurrentTemplateIdx(0);
         setAppliedPromo(null);
@@ -138,7 +131,6 @@ export default function PackagesContent({ userId, childId }: Props) {
     init();
   }, [userId, childId, router]);
 
-  // --- HANDLERS ---
   const handleSwitchProfile = (newChildId: string | null) => {
     if (newChildId) localStorage.setItem('prokick_active_child_id', newChildId);
     else localStorage.removeItem('prokick_active_child_id');
@@ -177,15 +169,15 @@ export default function PackagesContent({ userId, childId }: Props) {
     setPromoLoading(false);
 
     if (error || !data) {
-      setPromoError('ไม่พบโค้ดส่วนลดนี้');
+      setPromoError(p.promoNotFound);
       return;
     }
     if (data.expiry_date && data.expiry_date < now) {
-      setPromoError('โค้ดส่วนลดหมดอายุแล้ว');
+      setPromoError(p.promoExpired);
       return;
     }
     if (data.usage_limit != null && data.used_count >= data.usage_limit) {
-      setPromoError('โค้ดส่วนลดถูกใช้ครบจำนวนแล้ว');
+      setPromoError(p.promoUsedUp);
       return;
     }
     setAppliedPromo(data);
@@ -215,14 +207,13 @@ export default function PackagesContent({ userId, childId }: Props) {
     router.push(`/payment?${params.toString()}`);
   };
 
-  // --- CAROUSEL ---
   const activeTemplate = templates[currentTemplateIdx];
   const nextTemplate = () => {
     if (currentTemplateIdx < templates.length - 1)
-      setCurrentTemplateIdx((p) => p + 1);
+      setCurrentTemplateIdx((prev) => prev + 1);
   };
   const prevTemplate = () => {
-    if (currentTemplateIdx > 0) setCurrentTemplateIdx((p) => p - 1);
+    if (currentTemplateIdx > 0) setCurrentTemplateIdx((prev) => prev - 1);
   };
 
   if (loading)
@@ -245,9 +236,10 @@ export default function PackagesContent({ userId, childId }: Props) {
           >
             <ChevronLeft size={28} />
           </button>
-          <h1 className="flex-1 text-center text-lg font-bold text-gray-900 pr-8">
-            ซื้อแพ็กเกจ
+          <h1 className="flex-1 text-center text-lg font-bold text-gray-900">
+            {p.buyPackage}
           </h1>
+          <LanguageToggle />
         </div>
 
         {/* 2. SCROLLABLE CONTENT AREA */}
@@ -270,7 +262,7 @@ export default function PackagesContent({ userId, childId }: Props) {
                   {currentProfile?.nickname || currentProfile?.full_name}
                 </h2>
                 <p className="text-gray-500 text-xs">
-                  {childId ? 'นักเรียน (Junior)' : 'ผู้ปกครอง (Adult)'}
+                  {childId ? p.student : p.parent}
                 </p>
               </div>
             </div>
@@ -278,7 +270,7 @@ export default function PackagesContent({ userId, childId }: Props) {
               onClick={() => setShowProfileSelector(true)}
               className="text-xs text-gray-600 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors"
             >
-              สลับโปรไฟล์
+              {p.switchProfile}
             </button>
           </div>
 
@@ -291,11 +283,10 @@ export default function PackagesContent({ userId, childId }: Props) {
               />
               <div>
                 <p className="text-sm font-bold text-orange-800">
-                  มีแพ็กเกจใช้งานอยู่แล้ว
+                  {p.hasActivePackageTitle}
                 </p>
                 <p className="text-xs text-orange-600">
-                  ไม่สามารถซื้อแพ็กเกจซ้อนทับได้
-                  กรุณาใช้แพ็กเกจเดิมให้หมดหรือรอให้หมดอายุก่อน
+                  {p.hasActivePackageMsg}
                 </p>
               </div>
             </div>
@@ -303,13 +294,12 @@ export default function PackagesContent({ userId, childId }: Props) {
 
           {/* Packages Carousel */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900">แพ็กเกจแนะนำ</h2>
+            <h2 className="text-lg font-bold text-gray-900">{p.recommendedPackages}</h2>
             <p className="text-gray-500 text-xs mt-1 mb-4 font-light">
-              เลือกแพ็กเกจที่เหมาะกับไลฟ์สไตล์ของคุณ
+              {p.forYourLifestyle}
             </p>
 
             <div className="relative">
-              {/* Arrows */}
               {templates.length > 1 && (
                 <>
                   <button
@@ -329,7 +319,6 @@ export default function PackagesContent({ userId, childId }: Props) {
                 </>
               )}
 
-              {/* Card */}
               {templates.length > 0 ? (
                 <div
                   className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden ${selectedTemplate?.id === activeTemplate.id ? 'border-[#1e2e5c] shadow-md ring-1 ring-[#1e2e5c]' : 'border-gray-100 shadow-sm'}`}
@@ -349,22 +338,21 @@ export default function PackagesContent({ userId, childId }: Props) {
                       )}
                     </div>
                     <p className="text-gray-600 text-sm mb-6 font-light h-10 line-clamp-2">
-                      {activeTemplate.description ||
-                        'สนุกกับการเรียนรู้และฝึกฝนทักษะฟุตบอลอย่างมืออาชีพ'}
+                      {activeTemplate.description || p.defaultDesc}
                     </p>
                     <div className="flex items-baseline gap-1 mb-2">
                       <span className="text-[#1e2e5c] text-4xl font-bold">
                         {activeTemplate.price.toLocaleString()}
                       </span>
-                      <span className="text-gray-500 text-sm">บาท</span>
+                      <span className="text-gray-500 text-sm">{p.baht}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm text-gray-700 mb-6 font-medium">
                       <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg">
-                        {activeTemplate.session_count} ครั้ง
+                        {activeTemplate.session_count} {p.sessions}
                       </span>
                       <span className="text-gray-300">|</span>
                       <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg">
-                        {activeTemplate.days_valid} วัน
+                        {activeTemplate.days_valid} {p.days}
                       </span>
                     </div>
                     <button
@@ -380,16 +368,16 @@ export default function PackagesContent({ userId, childId }: Props) {
                         }`}
                     >
                       {hasActivePackage
-                        ? 'มีแพ็กเกจใช้งานอยู่แล้ว'
+                        ? p.hasActiveBtn
                         : selectedTemplate?.id === activeTemplate.id
-                          ? 'เลือกแล้ว (แตะเพื่อยกเลิก)'
-                          : 'เลือกแพ็กเกจนี้'}
+                          ? p.selectedBtn
+                          : p.selectBtn}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl">
-                  <p className="text-gray-400 text-sm">ไม่พบแพ็กเกจ</p>
+                  <p className="text-gray-400 text-sm">{p.noPackages}</p>
                 </div>
               )}
             </div>
@@ -400,7 +388,7 @@ export default function PackagesContent({ userId, childId }: Props) {
             className={`${hasActivePackage ? 'opacity-50 pointer-events-none' : ''}`}
           >
             <label className="text-xs text-gray-600 mb-2 block">
-              กรอกโค้ดส่วนลด
+              {p.enterPromoCode}
             </label>
             <div className="relative">
               <input
@@ -433,10 +421,10 @@ export default function PackagesContent({ userId, childId }: Props) {
               <div className="mt-2 flex items-center gap-2 text-green-700 text-xs font-medium">
                 <CheckCircle2 size={14} />
                 <span>
-                  ใช้โค้ด <span className="font-bold">{appliedPromo.code}</span> ได้ส่วนลด{' '}
+                  {p.appliedCode} <span className="font-bold">{appliedPromo.code}</span> {p.gotDiscount}{' '}
                   {appliedPromo.discount_type === 'percent'
                     ? `${appliedPromo.discount ?? 0}%`
-                    : `${(appliedPromo.discount ?? 0).toLocaleString()} บาท`}
+                    : `${(appliedPromo.discount ?? 0).toLocaleString()} ${p.baht}`}
                 </span>
               </div>
             )}
@@ -447,67 +435,63 @@ export default function PackagesContent({ userId, childId }: Props) {
             )}
           </div>
 
-          {/* 3. TOTAL PRICE SECTION (In-Flow) */}
+          {/* 3. TOTAL PRICE SECTION */}
           <div className="pt-2">
             <div className="border-t border-gray-100 pt-6">
               {selectedTemplate ? (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
                   {appliedPromo && (
                     <div className="flex justify-between items-center px-2 text-sm">
-                      <span className="text-gray-500">ราคาเต็ม</span>
+                      <span className="text-gray-500">{p.fullPrice}</span>
                       <span className="text-gray-400 line-through">
-                        {selectedTemplate.price.toLocaleString()} บาท
+                        {selectedTemplate.price.toLocaleString()} {p.baht}
                       </span>
                     </div>
                   )}
                   {appliedPromo && (
                     <div className="flex justify-between items-center px-2 text-sm">
-                      <span className="text-green-600">ส่วนลด ({appliedPromo.code})</span>
+                      <span className="text-green-600">{p.discount} ({appliedPromo.code})</span>
                       <span className="text-green-600 font-medium">
-                        -{getDiscountAmount().toLocaleString()} บาท
+                        -{getDiscountAmount().toLocaleString()} {p.baht}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between items-center px-2">
-                    <span className="text-gray-800 font-bold">รวมราคา:</span>
+                    <span className="text-gray-800 font-bold">{p.total}</span>
                     <span className="text-[#1e2e5c] text-2xl font-bold">
-                      {getFinalPrice().toLocaleString()} บาท
+                      {getFinalPrice().toLocaleString()} {p.baht}
                     </span>
                   </div>
                   <button
                     onClick={navigateToPayment}
                     className="w-full bg-[#1e2e5c] text-white py-3.5 rounded-xl font-bold text-base shadow-md active:scale-[0.99] transition-transform hover:bg-[#2b4185]"
                   >
-                    ดำเนินการต่อ
+                    {p.proceed}
                   </button>
                 </div>
               ) : (
                 <div className="h-[100px] flex flex-col items-center justify-center text-gray-300 gap-2 border border-dashed border-gray-100 rounded-xl bg-gray-50/50 select-none">
                   <PackageOpen size={24} className="opacity-30" />
                   <span className="text-xs font-light">
-                    {hasActivePackage
-                      ? 'ไม่สามารถเลือกแพ็กเกจได้'
-                      : 'กรุณาเลือกแพ็กเกจด้านบน'}
+                    {hasActivePackage ? p.cannotSelect : p.selectPackageFirst}
                   </span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* 4. BOTTOM NAV SPACER */}
           <div className="h-[90px] w-full shrink-0"></div>
         </div>
 
-        {/* 5. BOTTOM NAV (Overlay) */}
         <BottomNav userId={userId} />
 
-        {/* --- MODALS --- */}
+        {/* Profile Selector Modal */}
         {showProfileSelector && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-gray-900">
-                  เลือกโปรไฟล์
+                  {p.selectProfile}
                 </h3>
                 <button
                   onClick={() => setShowProfileSelector(false)}
@@ -532,7 +516,7 @@ export default function PackagesContent({ userId, childId }: Props) {
                     <p className="font-bold text-gray-900">
                       {parentProfile?.nickname || parentProfile?.full_name || 'Parent'}
                     </p>
-                    <p className="text-xs text-gray-500">ผู้ปกครอง</p>
+                    <p className="text-xs text-gray-500">{p.parentLabel}</p>
                   </div>
                   {!childId && (
                     <CheckCircle2
@@ -554,7 +538,7 @@ export default function PackagesContent({ userId, childId }: Props) {
                       <p className="font-bold text-gray-900">
                         {child.nickname}
                       </p>
-                      <p className="text-xs text-gray-500">นักเรียน</p>
+                      <p className="text-xs text-gray-500">{p.studentLabel}</p>
                     </div>
                     {childId === child.id && (
                       <CheckCircle2
