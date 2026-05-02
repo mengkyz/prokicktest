@@ -28,12 +28,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-const BANK_DETAILS = {
-  bankName: 'ธนาคารกสิกรไทย (KBank)',
-  accountName: 'บจก. โปรคิก อะคาเดมี่',
-  accountNumber: '012-3-45678-9',
-  qrImage: '/qrcode.jpg',
-};
+interface PaymentSettings {
+  id: string;
+  bank_name: string;
+  bank_code: string;
+  account_number: string;
+  account_name: string;
+  qr_code_base64: string;
+}
 
 interface Props {
   userId: string;
@@ -48,6 +50,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
 
   const [pkgTemplate, setPkgTemplate] = useState<any>(null);
   const [promoData, setPromoData] = useState<any>(null);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [file, setFile] = useState<File | null>(null);
@@ -61,13 +64,13 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data } = await supabase
-          .from('package_templates')
-          .select('*')
-          .eq('id', packageId)
-          .single();
+        const [{ data }, { data: settings }] = await Promise.all([
+          supabase.from('package_templates').select('*').eq('id', packageId).single(),
+          supabase.from('payment_settings').select('*').limit(1).single(),
+        ]);
 
         if (data) setPkgTemplate(data);
+        if (settings) setPaymentSettings(settings);
 
         if (promoId) {
           const { data: promo } = await supabase
@@ -101,8 +104,9 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
   };
 
   const handleDownloadQR = () => {
+    if (!paymentSettings?.qr_code_base64) return;
     const link = document.createElement('a');
-    link.href = BANK_DETAILS.qrImage;
+    link.href = paymentSettings.qr_code_base64;
     link.download = 'prokick-payment-qr.jpg';
     document.body.appendChild(link);
     link.click();
@@ -111,7 +115,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
 
   const handleCopyAccount = async () => {
     try {
-      const rawNumber = BANK_DETAILS.accountNumber.replace(/-/g, '');
+      const rawNumber = (paymentSettings?.account_number ?? '').replace(/-/g, '');
       await navigator.clipboard.writeText(rawNumber);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -282,7 +286,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
             <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm text-center">
               <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-inner inline-block mb-4">
                 <img
-                  src={BANK_DETAILS.qrImage}
+                  src={paymentSettings?.qr_code_base64 ?? ''}
                   alt="Payment QR"
                   className="w-48 h-48 object-contain mx-auto"
                   onError={(e) => {
@@ -309,14 +313,14 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                     K
                   </div>
                   <p className="text-sm font-medium text-gray-800">
-                    {BANK_DETAILS.bankName}
+                    {paymentSettings?.bank_name ?? ''}
                   </p>
                 </div>
 
                 <p className="text-xs text-gray-500 mt-3">เลขที่บัญชี</p>
                 <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <span className="text-lg font-bold text-[#1e2e5c] tracking-wide">
-                    {BANK_DETAILS.accountNumber}
+                    {paymentSettings?.account_number ?? ''}
                   </span>
                   <button
                     onClick={handleCopyAccount}
@@ -332,7 +336,7 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
 
                 <p className="text-xs text-gray-500 mt-3">ชื่อบัญชี</p>
                 <p className="text-sm font-medium text-gray-800">
-                  {BANK_DETAILS.accountName}
+                  {paymentSettings?.account_name ?? ''}
                 </p>
               </div>
             </div>
