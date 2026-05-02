@@ -5,7 +5,6 @@ import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { Kanit } from 'next/font/google';
 import {
-  Bell,
   User,
   CalendarDays,
   CreditCard,
@@ -318,10 +317,6 @@ export default function DashboardContent({ userId }: Props) {
             </div>
             <div className="flex items-center gap-2">
               <LanguageToggle />
-              <button className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors relative">
-                <Bell className="text-gray-600" size={20} />
-                <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-              </button>
             </div>
           </div>
 
@@ -329,8 +324,12 @@ export default function DashboardContent({ userId }: Props) {
             {/* Profile Card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center text-white overflow-hidden">
-                  {profile.avatar_url ? (
+                <div className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300">
+                  {activeProfileId ? (
+                    <div className="w-full h-full bg-[#c9b038] flex items-center justify-center text-white font-bold text-2xl">
+                      {children.find((c) => c.id === activeProfileId)?.nickname?.[0]}
+                    </div>
+                  ) : profile.avatar_url ? (
                     <img src={profile.avatar_url} className="w-full h-full object-cover" />
                   ) : (
                     <User size={32} className="text-gray-400" />
