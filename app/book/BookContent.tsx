@@ -498,7 +498,7 @@ export default function BookContent({ userId, childId }: Props) {
                   const queuePos = standbyCounts[cls.id] || 0;
                   const isDisabled = processing || !!myBookingStatus;
 
-                  let btnLabel = b.bookNow;
+                  let btnLabel: string = b.bookNow;
                   if (myBookingStatus === 'booked') btnLabel = b.alreadyBooked;
                   else if (myBookingStatus === 'standby') btnLabel = b.inQueue;
                   else if (isFull) btnLabel = `${b.joinWaitlistPrefix}${queuePos + 1}${b.joinWaitlistSuffix}`;
