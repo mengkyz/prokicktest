@@ -423,6 +423,6 @@ export const translations = {
       retry: 'Retry',
     },
   },
-} as const;
+};
 
-export type Translations = typeof translations.th;
+export type Translations = (typeof translations)['th'];
