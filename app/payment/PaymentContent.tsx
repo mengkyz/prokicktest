@@ -296,14 +296,6 @@ export default function PaymentContent({ userId, childId, packageId, promoId, is
                 />
               </div>
 
-              <button
-                onClick={handleDownloadQR}
-                className="flex items-center justify-center gap-2 w-full max-w-[200px] mx-auto text-xs font-medium text-gray-600 bg-gray-100 py-2 rounded-lg hover:bg-gray-200 transition-colors mb-6"
-              >
-                <Download size={16} />
-                บันทึก QR ลงเครื่อง
-              </button>
-
               <div className="border-t border-gray-100 my-4"></div>
 
               <div className="text-left space-y-1">
