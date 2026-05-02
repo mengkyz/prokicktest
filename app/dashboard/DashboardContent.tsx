@@ -496,7 +496,13 @@ export default function DashboardContent({ userId }: Props) {
               </div>
               <div className="space-y-3">
                 <button onClick={() => handleSwitchProfile(null)} className={`w-full flex items-center gap-4 p-3 rounded-xl border transition-all ${!activeProfileId ? 'border-[#1e2e5c] bg-blue-50' : 'border-gray-100 hover:bg-gray-50'}`}>
-                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500"><User size={20} /></div>
+                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 overflow-hidden">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <User size={20} />
+                    )}
+                  </div>
                   <div className="text-left">
                     <p className="font-bold text-gray-900">{profile?.nickname || profile?.full_name}</p>
                     <p className="text-xs text-gray-500">{d.parent.replace(' 👨‍👩‍👧', '')}</p>
