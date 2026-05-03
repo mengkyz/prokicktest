@@ -97,6 +97,7 @@ export default function PackagesContent({ userId, childId }: Props) {
           .from('package_templates')
           .select('*')
           .eq('type', type)
+          .eq('is_active', true)
           .order('price');
         setTemplates(temps || []);
 
