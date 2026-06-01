@@ -108,8 +108,8 @@ export default function DashboardContent({ userId }: Props) {
     let pkgQuery = supabase
       .from('user_packages')
       .select(`*, package_templates (*)`)
-      .eq('status', 'active')
-      .gt('expiry_date', nowStr);
+      .in('status', ['active', 'pending'])
+      .or(`expiry_date.is.null,expiry_date.gt.${nowStr}`);
 
     if (activeProfileId) {
       pkgQuery = pkgQuery.eq('child_id', activeProfileId);
@@ -400,8 +400,16 @@ export default function DashboardContent({ userId }: Props) {
                       </div>
                     </div>
                     <div className="pt-4 mt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400">
-                      <span className="flex items-center gap-1"><CalendarDays size={12} /> {d.start} {formatDate(activePackage.created_at)}</span>
-                      <span className="flex items-center gap-1 font-medium text-gray-500">{d.exp} {formatDate(activePackage.expiry_date)}</span>
+                      {activePackage.status === 'pending' ? (
+                        <span className="flex items-center gap-1">🛒 {t.locale === 'th-TH' ? 'ซื้อเมื่อ:' : 'Purchased:'} {formatDate(activePackage.created_at)}</span>
+                      ) : (
+                        <span className="flex items-center gap-1"><CalendarDays size={12} /> {d.start} {formatDate(activePackage.start_date || activePackage.created_at)}</span>
+                      )}
+                      {activePackage.expiry_date ? (
+                        <span className="flex items-center gap-1 font-medium text-gray-500">{d.exp} {formatDate(activePackage.expiry_date)}</span>
+                      ) : (
+                        <span className="flex items-center gap-1 font-medium text-amber-500">⏳ {t.locale === 'th-TH' ? 'รอเริ่มนับจากคลาสแรก' : 'Starts on first class'}</span>
+                      )}
                     </div>
                   </div>
                 </div>

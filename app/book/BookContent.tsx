@@ -151,9 +151,9 @@ export default function BookContent({ userId, childId }: Props) {
     let pkgQuery = supabase
       .from('user_packages')
       .select('*, package_templates(name)')
-      .eq('status', 'active')
+      .in('status', ['active', 'pending'])
       .gt('remaining_sessions', 0)
-      .gt('expiry_date', nowStr);
+      .or(`expiry_date.is.null,expiry_date.gt.${nowStr}`);
     if (currentChildId) pkgQuery = pkgQuery.eq('child_id', currentChildId);
     else pkgQuery = pkgQuery.eq('user_id', userId).is('child_id', null);
 
