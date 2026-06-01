@@ -105,8 +105,8 @@ export default function PackagesContent({ userId, childId }: Props) {
         let pkgQuery = supabase
           .from('user_packages')
           .select('id')
-          .eq('status', 'active')
-          .gt('expiry_date', nowStr);
+          .in('status', ['active', 'pending'])
+          .or(`expiry_date.is.null,expiry_date.gt.${nowStr}`);
 
         if (childId) {
           pkgQuery = pkgQuery.eq('child_id', childId);
