@@ -30,6 +30,21 @@ export async function GET(request: Request) {
     const results = [];
 
     // =========================================================================
+    // PART C: ACTIVATE PENDING PACKAGES
+    // Runs every 15 minutes. Finds all 'pending' packages whose first confirmed
+    // booking has crossed the 2-hour non-cancellable threshold, and activates
+    // them by setting start_date, expiry_date, and status = 'active'.
+    // =========================================================================
+    const { data: activationResult, error: activationError } = await supabase
+      .rpc('activate_pending_packages');
+
+    if (activationError) {
+      console.error('Package activation error:', activationError.message);
+    } else {
+      console.log('Packages activated this run:', activationResult?.activated ?? 0);
+    }
+
+    // =========================================================================
     // PART A: STANDBY PROMOTION NOTIFICATIONS (New Logic)
     // =========================================================================
     const { data: promoted } = await supabase.rpc('get_promoted_notifications');
